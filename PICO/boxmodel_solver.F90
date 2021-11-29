@@ -200,11 +200,11 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
        &    CALL FATAL(SolverName,'GroundedMask not found')
 
   !---- MODIFY FOR STOKES
-  DepthName = ListGetString(Params, 'Bottom Surface Name', UnFoundFatal=.TRUE.)
-  DepthVar => VariableGet( Model % Mesh % Variables, ZbName,UnFoundFatal=.TRUE.)
-  DepthVar => VariableGet( Model % Mesh % Variables, 'Zb')
+  DepthName = ListGetString(Params, 'Bottom Surface Variable Name', UnFoundFatal=.TRUE.)
+  DepthVar => VariableGet( Model % Mesh % Variables, DepthName,UnFoundFatal=.TRUE.)
+  DepthVar => VariableGet( Model % Mesh % Variables, 'Bottom Surface Variable Name ')
   IF (.NOT.ASSOCIATED(DepthVar)) &
-       &    CALL FATAL(SolverName,'Zb not found')
+       &    CALL FATAL(SolverName,'>Bottom Surface Variable Name< not found')
   !----
 
   !- get distance to GL
