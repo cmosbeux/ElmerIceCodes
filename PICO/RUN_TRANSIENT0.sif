@@ -1,0 +1,312 @@
+$name="RELAX_R<RUN>"
+$SCALARS_INTERVAL=1
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+include /scratch/cnt0021/gge6066/burruty/TiPACCS/PARAMETERS/boxmodel_Params_v2-2.IN
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+$DATA_DIR="/scratch/cnt0021/gge6066/burruty/TiPACCS/DATA"
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Header
+  Mesh DB "." "mesh_<MESH>"
+End
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Constants
+  sea level = Real $zsl
+  water density = Real $rhow
+  Sea Water Specific heat = Real $cw
+  Ice fusion latent heat = Real $Lf 
+  Ice density = Real $rhoi
+  Liquidus slope = Real $lambda1
+  Liquidus intercept = Real $lambda2
+  Liquidus pressure coeff = Real $lambda3
+  Melt factor = Real $meltfac
+End
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Simulation
+
+  Coordinate System  = Cartesian 2D
+  Grounding Line Melt = Logical False
+
+  Simulation Type = Transient
+  Simulation Timing = Logical True
+
+  Timestepping Method = "bdf"
+  BDF Order = 2
+  Output Intervals(1) = 500
+  Timestep Intervals(1) = 2500
+  Timestep Sizes(1) = 2.0e-3
+
+  Steady State Max Iterations = 2
+  Steady State Min Iterations = 1
+
+  OutPut File = "$name$".result"
+  Post File = "$name$".vtu"
+
+  Restart File = "<ID-1>.result"
+  Restart Position = 0
+  Restart Time = Real 0.0
+
+  max output level = 3 
+End
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Body 1
+  Equation = 1
+  Material = 1
+  Body Force = 1
+End
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Body Force 1
+  Flow BodyForce 1 = Real 0.0
+  Flow BodyForce 2 = Real 0.0
+  Flow BodyForce 3 = Real $gravity
+
+  Top Surface Accumulation = Equals smb
+
+  Bottom Surface Accumulation = Variable Melt
+     REAL PROCEDURE "USFs_Ronnie_inversion" "MinusA"
+
+  Water Pressure = Variable Zb
+    Real procedure "USF_WaterPressure" "WaterPressure"
+  distGL = Real 0.0  ! used in Solver DistanceSolver1
+  distGL Condition = Variable GroundedMask
+    Real procedure "USF_CondDistance" "CondDistance"
+  distIF = Real 0.0
+  distIF Condition = Variable FrontMask
+    Real procedure "USF_CondFront" "CondFront"
+   
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Material 1
+! Material properties
+  Viscosity Exponent = Real $1/n
+  Critical Shear Rate = Real 1.0e-12
+
+
+  SSA Mean Viscosity = Variable eta, Mu
+     REAL procedure "USFs_Ronnie_inversion" "SSAViscosity"
+  
+  SSA Mean Density = Real $rhoi
+
+  SSA Critical Thickness = Real 1.0
+
+! slip coeff for the SSA
+  SSA Friction Law = String "linear"
+  SSA Friction Parameter = Variable beta
+     REAL procedure "ElmerIceUSF" "TenPowerA"
+
+!! Min Value for H
+   Min H = Real 1.0
+
+!! For Save scalar to compute mass flux (=H*SSA_UV)
+  Flux = Equals H
+
+  GroundedAreaCoeff = Variable Groundedmask
+        Real procedure "USFs_Ronnie_inversion" "GroundedAreaCoeff"
+End
+
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Solver 1
+   Exec Solver = Before all
+   Equation = "point"
+   Variable = -nooutput "dumy"
+
+   procedure = "nearestpoint" "nearestpoint"
+   Exported Variable 1 = -dofs 1 -elem basins
+   !Exported Variable 1 = -dofs 1  basins
+
+   Variable 1 = File "basins"
+   Target Variable 1 = String "basins"
+   Variable 1 data file = File "$DATA_DIR$/schmidtko_initmip8km_means.nc"
+End
+!! Apply flotaison; from H compute Zb and Zs
+Solver 2
+   Equation = "Flotation"
+   Variable = GroundedMask
+      Procedure = "Flotation2" "Flotation2"
+
+  Exported Variable 1 = bedrock
+  Exported Variable 2 = zs
+  Exported Variable 3 = zb
+  Exported Variable 4 = alpha
+  Exported Variable 5 = mu
+
+!
+    Steady State Convergence Tolerance = 2.0
+!
+End
+
+Solver 3
+  Equation = "distance GL"
+  Variable = -dofs 1 distGL
+    Procedure = "DistanceSolve" "DistanceSolver1"
+  Optimize Bandwidth = logical False
+End
+
+Solver 4
+  Equation = "FrontMask"
+  Variable = FrontMask
+  Variable DOFs = 1
+    Procedure = "FrontThickness_mask" "FrontThickness_mask"
+End
+
+Solver 5
+  Equation = "Real distance IF"
+  Variable = -dofs 1 distIF
+    Procedure = "DistanceSolve" "DistanceSolver1"
+  Optimize Bandwidth = logical False
+  Exported variable 1 = -dofs 1 distIF
+End
+
+
+Solver 6
+   Exported Variable 1 = -dofs 1 -elem Melt
+   Exported Variable 2 = -dofs 1 -elem Boxes
+
+   Equation = "box melt"
+   Variable = -nooutput dummy
+   Procedure = "boxmodel_solver" "boxmodel_solver"
+
+   data file = File "$DATA_DIR$/boxmodel/DATA_boxmodelv2-2.nc"
+
+End
+
+Solver 7
+
+  Equation = "SSA"
+  Variable = -dofs 2 "SSAVelocity"
+
+   Procedure = "ElmerIceSolvers" "SSABasalSolver"
+
+   !compute solver time = logical True
+
+  include LINEAR_SOLVER.txt
+
+  Nonlinear System Max Iterations = 50
+  Nonlinear System Convergence Tolerance  = 1.0e-04
+  Nonlinear System Newton After Iterations = 3
+  Nonlinear System Newton After Tolerance = 1.0e-03
+  Nonlinear System Relaxation Factor = 1.00
+
+  Nonlinear System Newton Max divergent iterations = Integer 4
+
+  Sub-Element GL parameterization = Logical True
+  GL integration points number = Integer 20
+
+!
+    Steady State Convergence Tolerance = 1.0e-03
+!
+End
+
+!! Thickness solver
+Solver 8
+
+   Equation = "Thickness"
+   Variable = -dofs 1 "H"
+
+   !compute solver time = logical True
+
+   Exported Variable 1 = -dofs 1 "H Residual"
+   Exported Variable 2 = DhDt
+
+  Procedure = "ElmerIceSolvers" "ThicknessSolver"
+
+  include LINEAR_SOLVER_THICKNESS.txt
+ 
+   Transient Stabilisation = logical true
+   ! equation is linear if no min/max
+    Nonlinear System Max Iterations = 15
+    Nonlinear System Convergence Tolerance  = 1.0e-08
+    Nonlinear System Relaxation Factor = 1.00
+!
+    Steady State Convergence Tolerance =  1.0e-06
+!
+
+    Stabilization Method = Stabilized
+    Apply Dirichlet = Logical True
+
+    Compute dHdT = Logical True
+
+!!  the convection velocity (mean horizontal velocity)
+    Flow Solution Name = String "SSAVelocity"
+End
+
+Solver 9
+  Exec Interval = $SCALARS_INTERVAL
+  Exec Solver = After Timestep
+
+  Equation = "Save Scalars"
+   Procedure = File "SaveData" "SaveScalars"
+
+   Filename = File "Scalars_"$name$".dat"
+  Parallel Reduce = logical True
+
+  Variable 1 = "Time"
+
+! area
+   Variable 2 = "H"
+   Operator 2 = "volume"
+! area grounded
+   Variable 3 = "groundedmask"
+   Operator 3 = "volume"
+   Coefficient 3 = "GroundedAreaCoeff"
+
+ ! int H = Volume
+  Variable 4 = "H"
+  Operator 4 = "int"
+
+ ! int dh/dt = dVolume/dt
+  Variable 5 = "dhdt"
+  Operator 5 = "int"
+
+! int SMB
+  Variable 6 = "smb"
+  Operator 6 = "int"
+
+  Variable 7 = "Melt"
+  Operator 7 = "int"
+
+! SMB_H=Artificial additionnal Mass flux due to limits on H
+  Variable 8 = "h residual"
+  Operator 8 = "sum"
+
+! OUT Flow
+  Variable 9 = "SSAVelocity"
+  Operator 9 = "convective flux"
+  Coefficient 9 = "Flux"
+
+!=> Dvolume/dt = SMB + SMB_H - OUT
+
+  Variable 10 = "dhdt"
+  Operator 10 = "max"
+  Operator 11 = "min"
+
+End
+
+Solver 10
+  Exec Interval = $SCALARS_INTERVAL
+  Exec Solver = After Timestep
+  Equation = "Save INITMIP"
+    Procedure = File "INITMIP_Scalar_OUTPUT" "INITMIP_Scalar_OUTPUT"
+    Variable = -nooutput "unused"
+
+
+   Exported Variable 1 = -dofs 1 -elem IceDischarge
+   File Name = File "INITMIP_Scalar_OUTPUT_"$name$".dat"
+End
+
+
+!#####
+Equation 1
+  Active Solvers (10)= 1 2 3 4 5 6 7 8 9 10
+End
+
+!#####
+Boundary Condition 1
+  Name = "Ice Front"
+  Target Boundaries = 1
+
+  Calving Front = logical true
+
+  Save Scalars = Logical True
+End
