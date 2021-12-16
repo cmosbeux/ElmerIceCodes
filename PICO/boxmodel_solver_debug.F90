@@ -264,7 +264,6 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   rr(:) = 0.0_dp
 
 
-!write(*,*), 'number of active elements =', Solver % NumberOfActiveElements
 !------------------------------------------------------------------------------
 ! 2- Start Boxes Computation
 !------------------------------------------------------------------------------
@@ -307,8 +306,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
      END IF
   END DO
   !compute the number of boxes per basin (Eq. (9) in Reese et al., 2018)
-  boxes = 2!1+NINT(SQRT(basinmax/distmax)*(boxmax-1))
-  !write(*,*) 'basinmax, boxes = ', basinmax, boxes
+  boxes = 2 !1+NINT(SQRT(basinmax/distmax)*(boxmax-1))
   CALL INFO(TRIM(SolverName),'Boxes DONE', Level =5)
 
 !------------------------------------------------------------------------------
@@ -359,8 +357,6 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
      ENDDO
   END DO !end of loop on elements
 
-!  CALL INFO(TRIM(SolverName),'Go Parallel', Level =5)
-
   !Deal again with parallelization (I deleted a loop on the number of basin to treat 1 basin case)
   !TO DO: a clean job about the 1 basin case!!!!
   DO b=1,MaxBas
@@ -372,6 +368,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
         END IF
     ENDDO
   END DO
+  write(*,*) 'Total Ice Shelf Area [m^2]=', SUM(Abox(:,14))
   CALL INFO(TRIM(SolverName),'Area Computation DONE', Level =5)
 
 !------------------------------------------------------------------------------
@@ -398,7 +395,6 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
         g1 = gT * Abox(1,b)   !exchange velocity
         tmp1 = g1 / (CC*rhostar*(beta*S0(b)*meltfac-alpha))
         sn = (0.5*tmp1)**2 - tmp1*Tstar
-        !write(*,*) '(Zb, T*)', zzz, Tstar
         ! to avoid negative discriminent (no solution for x otherwise) :
         IF( sn .lt. 0.d0 ) THEN
            xbox = 0.d0
@@ -411,7 +407,6 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
         Sbox(1,b) = Sbox(1,b) + SS *  SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
         qqq(b) = qqq(b) + CC*rhostar*(beta*(S0(b)-SS)-alpha*(T0(b)-TT)) *  SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:)) !flux (per basin)
         Melt(MeltPerm(NodeIndexes(1:n))) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )
-        !write(*,*) 'B1', SS, TT
         totalmelt=totalmelt+SUM(Melt(MeltPerm(NodeIndexes(1:n))))/SIZE(NodeIndexes(:)) * SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
      END IF
 
@@ -460,9 +455,7 @@ DO kk=2,boxmax
          SS = Sbox(kk-1,b) - xbox*Sbox(kk-1,b)*meltfac
          Tbox(kk,b) =  Tbox(kk,b) + TT * SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
          Sbox(kk,b) =  Sbox(kk,b) + SS * SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
-!         write(*,*) 'T and S', Tbox(kk,b), Sbox(kk,b)
          Melt(MeltPerm(NodeIndexes(1:n))) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT)
-         write(*,*) 'B',  SS, TT
          totalmelt=totalmelt+SUM(Melt(MeltPerm(NodeIndexes(1:n))))/SIZE(NodeIndexes(:)) * SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
       END IF
    END DO
@@ -491,7 +484,6 @@ ELSE
    Integ_Reduced = Integ
 ENDIF
 
-!write(*,*) 'Abox, Tbox, Sbox, Melt =', Abox(:,b), Tbox(:,b), Sbox(:,b), totalmelt
 CALL INFO(TRIM(SolverName), 'Other Boxes DONE', Level=5)
 
 DEALLOCATE(Zbox, Abox, Tbox, Sbox, Mbox, T0, S0, rr,localunity)
