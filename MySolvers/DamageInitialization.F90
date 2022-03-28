@@ -49,8 +49,10 @@ LOGICAL :: TransientSimulation
 
 TYPE(Element_t),POINTER :: Element
 LOGICAL :: AllocationsDone = .FALSE., Found, Converged
-INTEGER :: n, t, istat, other_body_id, iter, NonlinearIter REAL(KIND=dp) :: Norm, PrevNorm=0.0d00, NonlinearTol, RelativeChange
-TYPE(ValueList_t), POINTER :: BodyForce, Material, BC, SolverParams REAL(KIND=dp), ALLOCATABLE :: MASS(:,:), STIFF(:,:), LOAD(:), FORCE(:)
+INTEGER :: n, t, istat, other_body_id, iter, NonlinearIter
+REAL(KIND=dp) :: Norm, PrevNorm=0.0d00, NonlinearTol, RelativeChange
+TYPE(ValueList_t), POINTER :: BodyForce, Material, BC, SolverParams
+REAL(KIND=dp), ALLOCATABLE :: MASS(:,:), STIFF(:,:), LOAD(:), FORCE(:)
 
 CHARACTER(LEN=MAX_NAME_LEN) :: BoundaryType
 SAVE MASS, STIFF, LOAD, FORCE,&
@@ -86,7 +88,7 @@ DO iter=1,NonlinearIter
     Converged = .FALSE.
     WRITE(Message,'(A,I5,A,I5)') 'Nonlinear iteration no.',iter,&
           ' of max. ', NonlinearIter
-     CALL INFO(’MyHeatSolve’,Message,level=1)
+     CALL INFO('DamageInitialization', Message,level=1)
     !Initialize the system and do the assembly:
     !------------------------------------------
     CALL DefaultInitialize()
@@ -108,8 +110,8 @@ DO iter=1,NonlinearIter
         END IF
 
         !Get load for force vector !------------------------- LOAD = 0.0d0
-        BodyForce => GetBodyForce() IF ( ASSOCIATED(BodyForce) ) &
-        LOAD(1:n) = GetReal( BodyForce, 'Damage Source', Found )
+        BodyForce => GetBodyForce()
+        IF ( ASSOCIATED(BodyForce) ) LOAD(1:n) = GetReal( BodyForce, 'Damage Source', Found )
 
         !Get element local matrix and rhs vector:
         !----------------------------------------
@@ -144,10 +146,8 @@ DO iter=1,NonlinearIter
     
         ! check type of boundary and set BC accordingly
         !----------------------------------------------
-        BoundaryType = GetString(BC,’Boundary Type’,Found)
+        BoundaryType = GetString(BC,'Boundary Type',Found)
         IF (.NOT. Found) CYCLE
-    END DO
-
 
 !----------------------------------------------------------------
     END DO ! end Assembly for Neumann boundary conditions
@@ -174,32 +174,30 @@ DO iter=1,NonlinearIter
     
     WRITE( Message, * ) 'Result Norm : ',Norm
     CALL Info( 'DamageInitialization', Message, Level=4 )
-    WRITE( Message, * ) 'Relative Change : ',RelativeChange CALL Info( ’MyHeatSolve’, Message, Level=4 )
+    WRITE( Message, * ) 'Relative Change : ', RelativeChange
+    CALL Info( 'DamageInitialization', Message, Level=4 )
     
     ! do we have to do another round?
     ! -------------------------------
     IF ( RelativeChange < NonlinearTol ) THEN ! NO
-            Converged = .TRUE.
-            EXIT
-         ELSE ! YES
-            PrevNorm = Norm
-         END IF
-    ! has non-linear solution converged?
-    ! ----------------------------------
-    IF ((.NOT.Converged) .AND. (NonlinearIter > 1)) THEN
-        WRITE( Message, * ) 'Nonlinear solution has not converged',& 'Relative Change=',RelativeChange,'>',NonlinearTol
-        CALL Warn('DamageInitialization', Message)
-    ELSE
-        WRITE( Message, * ) 'Nonlinear solution has converged after ',& iter,' steps.'
-        CALL Info('DamageInitialization',Message,Level=1)
+        Converged = .TRUE.
+        EXIT
+    ELSE ! YES
+        PrevNorm = Norm
     END IF
-
-
-
-
 !----------------------------------------------------------------
 END DO ! of the nonlinear iteration
 !----------------------------------------------------------------
+
+! has non-linear solution converged?
+! ----------------------------------
+IF ((.NOT.Converged) .AND. (NonlinearIter > 1)) THEN
+    WRITE( Message, * ) 'Nonlinear solution has not converged','Relative Change=',RelativeChange,'>',NonlinearTol
+    CALL Warn('DamageInitialization', Message)
+ELSE
+    WRITE( Message, * ) 'Nonlinear solution has converged after ', iter,' steps.'
+    CALL Info('DamageInitialization',Message,Level=1)
+END IF
 
 
 !----------------------------------------------------------------
@@ -219,8 +217,8 @@ TYPE(Element_t), POINTER :: Element
 LOGICAL :: TransientSimulation
 !----------------------------------------------------------------
 REAL(KIND=dp) :: Basis(n),dBasisdx(n,3),ddBasisddx(n,3,3)
-REAL(KIND=dp) :: detJ, LoadAtIP,&
-LOGICAL :: Stat
+REAL(KIND=dp) :: detJ, LoadAtIP
+LOGICAL :: Stat, getSecondDerivatives
 INTEGER :: t,i,j,DIM
 TYPE(GaussIntegrationPoints_t) :: IP
 TYPE(Nodes_t) :: Nodes
@@ -238,11 +236,9 @@ MASS = 0.0d0
 !----------------------
 IP = GaussPoints( Element )
 
-
 !----------------------------------------------------------------
 !  Loop over Gauss-points (element Integration)
 !----------------------------------------------------------------
-
 DO t=1,IP % n
     !Basis function values & derivatives at the integration point:
     !-------------------------------------------------------------
@@ -314,6 +310,7 @@ DO t=1,IP % n
     DO j=1,n
         FORCE(j) = FORCE(j) + IP % s(t) * DetJ * LoadAtIP * Basis(j)
     END DO
+END DO
 !----------------------------------------------------------------
 END SUBROUTINE BoundaryCondition
 !----------------------------------------------------------------
