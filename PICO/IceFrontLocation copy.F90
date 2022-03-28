@@ -28,7 +28,7 @@
 ! *
 ! *  Original Date: 
 ! *****************************************************************************
-SUBROUTINE FrontThickness_mask( Model,Solver,dt,TransientSimulation )
+SUBROUTINE IceFrontMask( Model,Solver,dt,TransientSimulation )
 !------------------------------------------------------------------------------
 !******************************************************************************
 !
@@ -79,7 +79,7 @@ SUBROUTINE FrontThickness_mask( Model,Solver,dt,TransientSimulation )
 
   LOGICAL :: Parallel
 
-  CHARACTER(LEN=MAX_NAME_LEN) :: SolverName = 'FrontThickness_mask'
+  CHARACTER(LEN=MAX_NAME_LEN) :: SolverName = 'Ice Front Location'
 
   SAVE AllocationsDone, DIM, SolverName
   !------------------------------------------------------------------------------
@@ -107,6 +107,7 @@ SUBROUTINE FrontThickness_mask( Model,Solver,dt,TransientSimulation )
    k = 0
    kk = 0
    DO t=1,Model % NumberOfBoundaryElements
+
     Element => GetBoundaryElement(t)
     n = GetElementNOFNodes(Element)
     NodeIndexes => Element % NodeIndexes
@@ -114,28 +115,13 @@ SUBROUTINE FrontThickness_mask( Model,Solver,dt,TransientSimulation )
     BC => GetBC(Element)
     
     DIM = CoordinateSystemDimension()
-    
-    !VariableValues(Permutation(NodeIndexes(1:n))) = 0.0_dp
-    IF (DIM.LT.3) THEN
-        !For 2D problems, the ice front is the full front line boundary
+
+    IsFront = ListGetLogical(BC,'Ice Front',GotIt)
+    IF (Isfront) THEN
         VariableValues(Permutation(NodeIndexes(1:n))) = 1.0_dp
     ELSE
-        !For Stokes, we need more (boundary is the entire surface on which we apply the solver)
-        !Need a logical key word
-        !IsFront = ListGetLogical( Model % Simulation, 'Compute Distance to Front', UnFoundFatal=UnFoundFatal )
-        !IF (IsFront) THEN
-
-            other_body_id = Element % BoundaryInfo % outbody
-            IF (other_body_id.EQ.-1) THEN
-                !it is inland
-                VariableValues(Permutation(NodeIndexes(1:n))) = 0.0_dp
-                !write(*,*) 'inland elem', kk
-                kk=kk+1
-            ELSE
-                VariableValues(Permutation(NodeIndexes(1:n))) = 1.0_dp
-                k=k+1
-                !write(*,*) 'boundary outline', k
-            END IF
+        CYCLE
+        !VariableValues(Permutation(NodeIndexes(1:n))) = -1.0_dp
     END IF
 
    END DO
@@ -144,6 +130,6 @@ SUBROUTINE FrontThickness_mask( Model,Solver,dt,TransientSimulation )
 
   CALL INFO( SolverName , 'Done')
 
-END SUBROUTINE FrontThickness_mask
+END SUBROUTINE IceFrontMask
 !------------------------------------------------------------------------------
 
