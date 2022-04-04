@@ -48,26 +48,84 @@ LOGICAL :: TransientSimulation
 !----------------------------------------------------------------
 
 TYPE(Element_t),POINTER :: Element
-LOGICAL :: AllocationsDone = .FALSE., Found, Converged
-INTEGER :: n, t, istat, other_body_id, iter, NonlinearIter
-REAL(KIND=dp) :: Norm, PrevNorm=0.0d00, NonlinearTol, RelativeChange
+LOGICAL :: AllocationsDone = .FALSE., Found, Converged, &
+    LimitSolution, FoundLowerLimit, FoundUpperLimit, UnFoundFatal=.TRUE.
+
+LOGICAL, ALLOCATABLE ::  LimitedSolution(:,:), ActiveNode(:,:)
+
+INTEGER :: i, n, t, k, l, istat, other_body_id, iter, NonlinearIter, Active, NMAX, MMAX
+INTEGER :: dummyInt, Indexes(128)
+INTEGER :: CorrectedLowerLimit,CorrectedUpperLimit
+INTEGER , POINTER :: NodeIndexes(:), DPerm(:)
+REAL(KIND=dp), POINTER :: Damage(:), ForceVector(:), PointerToResidualVector(:)
+
+REAL(KIND=dp) :: Norm, PrevNorm, LinearTol, NonlinearTol, RelativeChange, OriginalValue
 TYPE(ValueList_t), POINTER :: BodyForce, Material, BC, SolverParams
-REAL(KIND=dp), ALLOCATABLE :: MASS(:,:), STIFF(:,:), LOAD(:), FORCE(:)
+TYPE(Variable_t), POINTER :: Dresidual
+
+REAL(KIND=dp), ALLOCATABLE :: MASS(:,:), STIFF(:,:), LOAD(:), FORCE(:), &
+    UpperLimit(:), LowerLimit(:), ResidualVector(:), OldValues(:), OldRHS(:), &
+    StiffVector(:)
+
+TYPE(Matrix_t), POINTER :: Systemmatrix
 
 CHARACTER(LEN=MAX_NAME_LEN) :: BoundaryType
+CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName = 'DamageInitialization'
+CHARACTER(LEN=MAX_NAME_LEN) :: VariableName
+
 SAVE MASS, STIFF, LOAD, FORCE,&
-    AllocationsDone, PrevNorm
+    AllocationsDone, PrevNorm, UpperLimit, LowerLimit, VariableName, LimitedSolution, ActiveNode, ResidualVector, &
+    OldValues, OldRHS, StiffVector
+
+
+! Get variable name
+!-----------------------
+VariableName = TRIM(Solver % Variable % Name)
+Damage => Solver % Variable % Values     ! Nodal values
+IF (.NOT.ASSOCIATED(Damage)) CALL Fatal(SolverName, 'Variable values not associated')
+DPerm => Solver % Variable % Perm       ! Permutations index
+
+SystemMatrix => Solver % Matrix
+ForceVector => Solver % Matrix % RHS
 
 ! Allocate some permanent storage, this is done first time
 !--------------------------------------------------------------
 IF ( .NOT. AllocationsDone ) THEN
-    N = Solver % Mesh % MaxElementNodes !big enough for elemental arrays
-    ALLOCATE( FORCE(N), LOAD(N), MASS(N,N), STIFF(N,N), STAT=istat )
+    NMAX = Solver % Mesh % MaxElementNodes !big enough for elemental arrays
+    MMAX = Model % Mesh % NumberOfNodes
+    K = SIZE( SystemMatrix % Values )
+    L = SIZE( SystemMatrix % RHS )
+
+    WRITE(*,*) 'NMAX, MMAX:', NMAX, MMAX
+    ALLOCATE( FORCE(NMAX), LOAD(NMAX), MASS(NMAX,NMAX), STIFF(NMAX,NMAX), &
+        LimitedSolution(MMAX,2), &
+        Lowerlimit(MMAX), &
+        UpperLimit(MMAX), &
+        ActiveNode(MMAX,2), &
+        ResidualVector(L), &
+        OldValues(K),&
+        OldRHS(L),&
+        StiffVector(L),&
+        STAT=istat )
+
     IF ( istat /= 0 ) THEN
-        CALL Fatal( 'MyHeatSolve','Memory allocation error for matrix/vectors.' )
+        CALL Fatal( 'Damage initialization','Memory allocation error for matrix/vectors.' )
     END IF
+
+    CALL Info(SolverName,'Memory allocations done' )
     AllocationsDone = .TRUE.
+    ActiveNode = .FALSE.
+    ResidualVector = 0.0_dp
+    Damage = 0.0_dp
 END IF
+LimitedSolution=.FALSE.
+
+
+!    Get variables for the residual
+!------------------------------------
+DResidual => VariableGet( Model % Mesh % Variables, TRIM(VariableName) // ' Residual',UnFoundFatal=UnFoundFatal)
+PointerToResidualVector => DResidual % Values
+
 
 !Read in solver parameters
 !-------------------------
@@ -75,10 +133,26 @@ SolverParams => GetSolverParams()
 IF (.NOT. ASSOCIATED(SolverParams)) &
     CALL FATAL('Damage initialization','No Solver section found')
 
+LinearTol = GetConstReal( SolverParams, &
+       'Linear System Convergence Tolerance',    Found )
+  IF ( .NOT.Found ) THEN
+     CALL Fatal(SolverName, 'No >Linear System Convergence Tolerance< found')
+  END IF
+
+
 NonlinearIter = GetInteger(SolverParams, & 'Nonlinear System Max Iterations', Found)
 IF ( .NOT.Found ) NonlinearIter = 1
 NonlinearTol = GetConstReal( SolverParams, 'Nonlinear System Convergence Tolerance', Found )
 IF ( .NOT.Found ) NonlinearTol = 1.0D-03
+
+!Get limiter on the solution (hard limit are Damage > 0 and Damage<1)
+LimitSolution = GetLogical( SolverParams, 'Limit Solution', Found )
+IF ( .NOT. Found ) LimitSolution = .FALSE.
+IF (LimitSolution) THEN
+      CALL Info(SolverName, 'Keyword > Limit Solution < found. Solution will be limited',Level=6)
+ELSE
+      CALL Info(SolverName, 'No keyword > Limit Solution < found. Solution will not be limited',Level=6)
+END IF
 
 
 !----------------------------------------------------------------
@@ -96,22 +170,44 @@ DO iter=1,NonlinearIter
 !----------------------------------------------------------------
 ! Assembly for the domain
 !----------------------------------------------------------------
-     DO t=1,Solver % NumberOfActiveElements
-        ! get element info
+    CorrectedUpperLimit = 0
+    CorrectedLowerLimit = 0
+    DO t=1,Solver % NumberOfActiveElements
+
+        !Get element info
         !-----------------
         Element => GetActiveElement(t)
         n = GetElementNOFNodes()
-        ! get material parameters
-        !----------------------
+        NodeIndexes => Element % NodeIndexes
+    
+        !Get material parameters
+        !------------------------
         Material => GetMaterial()
         IF (.NOT. ASSOCIATED(Material)) THEN
         WRITE(Message,'(A,I5,A)') 'No material for bulk element no. ',t,' found.'
-           CALL FATAL('DamageInitialization',Message)
+            CALL FATAL('DamageInitialization',Message)
+        END IF
+    
+        !Limited Solution
+        !-------------------
+        IF (LimitSolution) THEN
+            UpperLimit(Element % Nodeindexes(1:n)) = ListGetReal(Material,TRIM(VariableName) // ' Upper Limit', n, Element % NodeIndexes, FoundUpperLimit)
+            LimitedSolution(Element % Nodeindexes(1:n), 1) = FoundUpperLimit
+
+            LowerLimit(Element % Nodeindexes(1:n)) = ListGetReal(Material,TRIM(VariableName) // ' Lower Limit', n, Element % NodeIndexes, FoundLowerLimit)
+            LimitedSolution(Element % Nodeindexes(1:n), 2) = FoundLowerLimit
         END IF
 
-        !Get load for force vector !------------------------- LOAD = 0.0d0
+        !Get load for force vector (source)
+        !----------------------------------
+        LOAD = 0.0d0
         BodyForce => GetBodyForce()
         IF ( ASSOCIATED(BodyForce) ) LOAD(1:n) = GetReal( BodyForce, 'Damage Source', Found )
+        
+!        DO k=1,n
+!            IF (LOAD(k)<0.0) WRITE(*,*) LOAD(k)
+!        END DO
+
 
         !Get element local matrix and rhs vector:
         !----------------------------------------
@@ -119,78 +215,157 @@ DO iter=1,NonlinearIter
 
         !Update global matrix and rhs vector from local matrix and vector
         !---------------------------------------------------------------
-        IF ( TransientSimulation ) THEN
-            CALL Default1stOrderTime( MASS,STIFF,FORCE )
-        END IF
-
+        IF ( TransientSimulation ) CALL Default1stOrderTime( MASS,STIFF,FORCE )
+        !------------------------------------------------------------------------------
+        !      Update global matrix and rhs vector from local matrix & vector
+        !------------------------------------------------------------------------------
         CALL DefaultUpdateEquations( STIFF, FORCE )
-!----------------------------------------------------------------
+
+    !----------------------------------------------------------------
     END DO ! end Assembly for the domain
-!----------------------------------------------------------------
+    !----------------------------------------------------------------
+
+    CALL DefaultFinishBulkAssembly()
 
 !----------------------------------------------------------------
-! Assembly for the Neumann boundaru conditions (Not used right now)
+! Assembly for the Neumann boundary conditions (Not used right now)
 !----------------------------------------------------------------
-
-    DO t=1, Solver % Mesh % NumberOfBoundaryElements
-        Element => GetBoundaryElement(t)
-        IF ( .NOT.ActiveBoundaryElement() ) CYCLE
-        n = GetElementNOFNodes()
-        ! no evaluation of Neumann BC’s on points
-        IF ( GetElementFamily() == 1 ) CYCLE
-        BC => GetBC()
-
-        FORCE = 0.0d00
-        MASS = 0.0d00
-        STIFF = 0.0d00
-    
-        ! check type of boundary and set BC accordingly
-        !----------------------------------------------
-        BoundaryType = GetString(BC,'Boundary Type',Found)
-        IF (.NOT. Found) CYCLE
-
-!----------------------------------------------------------------
-    END DO ! end Assembly for Neumann boundary conditions
+!    DO t=1, Solver % Mesh % NumberOfBoundaryElements
+!        Element => GetBoundaryElement(t)
+!        IF ( .NOT. ActiveBoundaryElement() ) CYCLE
+!        n = GetElementNOFNodes()
+!        ! no evaluation of Neumann BC’s on points
+!        IF ( GetElementFamily() == 1 ) CYCLE
+!        BC => GetBC()
+!
+!        FORCE = 0.0d00
+!        MASS = 0.0d00
+!        STIFF = 0.0d00
+!
+!        ! check type of boundary and set BC accordingly
+!        !----------------------------------------------
+!        BoundaryType = GetString(BC,'Boundary Type',Found)
+!        IF (.NOT. Found) CYCLE
+!    END DO ! end Assembly for Neumann boundary conditions
 !----------------------------------------------------------------
 
     CALL DefaultFinishAssembly()
-    
-    ! call Elmer Solver routine for Dirichlet BCs
-    !-------------------------------------------------
     CALL DefaultDirichletBCs()
 
-    
+    !------------------------------------------------------------------------------
+    ! limit solution
+    !------------------------------------------------------------------------------
+
+    IF (LimitSolution) THEN
+        OldValues = SystemMatrix % Values
+        OldRHS = ForceVector
+
+        ! manipulation of the matrix
+        !---------------------------
+        DO i=1,Model % Mesh % NumberOfNodes
+            k = DPerm(i)
+            IF ((k > 0) .AND. (ActiveNode(i,1) .OR. ActiveNode(i,2))) THEN
+                CALL ZeroRow( SystemMatrix, k )
+                CALL SetMatrixElement( SystemMatrix, k, k, 1.0_dp )
+                IF (ActiveNode(i,1)) THEN
+                    SystemMatrix % RHS(k) = LowerLimit(i) +1e-5
+                ELSE IF (ActiveNode(i,2)) THEN
+                    SystemMatrix % RHS(k) = UpperLimit(i)
+                END IF
+            END IF
+        END DO
+    END IF
+
     ! Solve the system
-    ! ----------------
+    ! -----------------------------------------------------------------------------
+
+    PrevNorm = Solver % Variable % Norm
     Norm = DefaultSolve()
 
     ! compute relative change of norm
-    ! -------------------------------
+    !------------------------------------------------------------------------------
     IF ( PrevNorm + Norm /= 0.0d0 ) THEN
         RelativeChange = 2.0d0 * ABS( PrevNorm-Norm ) / (PrevNorm + Norm)
     ELSE
-            RelativeChange = 0.0d0
+        RelativeChange = 0.0d0
     END IF
     
     WRITE( Message, * ) 'Result Norm : ',Norm
     CALL Info( 'DamageInitialization', Message, Level=4 )
     WRITE( Message, * ) 'Relative Change : ', RelativeChange
     CALL Info( 'DamageInitialization', Message, Level=4 )
+
+
+    ! compute residual
+    !------------------------------------------------------------------------------
+    !-----------------------------
+    ! determine "active" nodes set
+    !-----------------------------
+    IF (LimitSolution) THEN
+
+        SystemMatrix % Values = OldValues
+        ForceVector = OldRHS
+
+        !to modify for parallel
+        CALL CRS_MatrixVectorMultiply( SystemMatrix, Damage, StiffVector)
+        ResidualVector =  StiffVector - ForceVector
+
+        DO i=1,Model % NumberOfNodes
+            l= DPerm(i)
+             IF (l<1) CYCLE
+             !---------------------------------------------------------
+             ! if upper limit is exceeded, manipulate matrix in any case
+             !----------------------------------------------------------
+             IF ((LimitedSolution(i,1)).AND.(Damage(l)-LowerLimit(i)<0.0_dp)) THEN
+                ActiveNode(i,1) = .TRUE.
+                WRITE(*,*) Damage(l)
+             END IF
+             IF ((LimitedSolution(i,2)).AND.(Damage(l)-UpperLimit(i)>0.0_dp)) THEN
+                ActiveNode(i,2) = .TRUE.
+             END IF
+
+             IF ( LimitedSolution(i,1) .AND. ResidualVector(l) < -LinearTol &
+                      .AND. iter>1 ) ActiveNode(i,1) = .FALSE.
+             IF ( LimitedSolution(i,2) .AND. ResidualVector(l) >  LinearTol &
+                      .AND. iter>1 ) ActiveNode(i,2) = .FALSE.
+
+             IF( .NOT.ActiveNode(i,1) .AND. .NOT.ActiveNode(i,2) ) THEN
+                PointerToResidualVector(DResidual % Perm(i)) = 0.0_dp
+             ELSE
+                PointerToResidualVector(DResidual % Perm(i)) = ResidualVector(l)
+            ENDIF
+        END DO
     
-    ! do we have to do another round?
-    ! -------------------------------
+        ! write info about corrected nodes
+        WRITE(Message,'(a,e13.6,a,e13.6)') &
+       'Max/min Damage:', MAXVAL(Damage(:)),'/', MINVAL( Damage(:))
+        CALL Info( 'DamageInitialization', Message, Level=4 )
+!        WRITE ( Message, * ) 'Number of constrained points (lower/upper): ', CorrectedLowerLimit, CorrectedUpperLimit
+!        CALL Info( 'DamageInitialization', Message, Level=4 )
+    END IF
+
+    ! check for convergence
+    ! ----------------------
     IF ( RelativeChange < NonlinearTol ) THEN ! NO
         Converged = .TRUE.
         EXIT
     ELSE ! YES
         PrevNorm = Norm
     END IF
+
 !----------------------------------------------------------------
-END DO ! of the nonlinear iteration
+END DO ! of the nonlinear iteration loop
 !----------------------------------------------------------------
 
-! has non-linear solution converged?
-! ----------------------------------
+! write info about corrected nodes and convergence
+!---------------------------------------------------
+WRITE(Message,'(a,e13.6,a,e13.6)') &
+'Max/min Damage:', MAXVAL(Damage(:)),'/', MINVAL( Damage(:))
+CALL Info( 'DamageInitialization', Message, Level=1 )
+WRITE ( Message, * ) 'Number of constrained points (lower/upper): ', COUNT(ActiveNode(:,1)), COUNT(ActiveNode(:,2))
+
+CALL Info( 'DamageInitialization', Message, Level=1 )
+
 IF ((.NOT.Converged) .AND. (NonlinearIter > 1)) THEN
     WRITE( Message, * ) 'Nonlinear solution has not converged','Relative Change=',RelativeChange,'>',NonlinearTol
     CALL Warn('DamageInitialization', Message)
@@ -198,7 +373,6 @@ ELSE
     WRITE( Message, * ) 'Nonlinear solution has converged after ', iter,' steps.'
     CALL Info('DamageInitialization',Message,Level=1)
 END IF
-
 
 !----------------------------------------------------------------
 !internal subroutines of DamageInitialization Solver
@@ -256,9 +430,8 @@ DO t=1,IP % n
         DO i=1,n
 
             IF (TransientSimulation) THEN
-                MASS(i,j) = MASS(i,j)+ IP % s(t) * DetJ * & Basis(i)*Basis(j)
+                MASS(i,j) = MASS(i,j)+ IP % s(t) * DetJ * Basis(i)*Basis(j)
             END IF
-            
             STIFF(i,j) = STIFF(i,j) + IP % s(t) * DetJ * SUM(dBasisdx(i,1:DIM) * dBasisdx(j,1:DIM))
         END DO
     END DO
