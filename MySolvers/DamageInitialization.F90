@@ -340,8 +340,7 @@ DO iter=1,NonlinearIter
         WRITE(Message,'(a,e13.6,a,e13.6)') &
        'Max/min Damage:', MAXVAL(Damage(:)),'/', MINVAL( Damage(:))
         CALL Info( 'DamageInitialization', Message, Level=4 )
-!        WRITE ( Message, * ) 'Number of constrained points (lower/upper): ', CorrectedLowerLimit, CorrectedUpperLimit
-!        CALL Info( 'DamageInitialization', Message, Level=4 )
+
     END IF
 
     ! check for convergence
