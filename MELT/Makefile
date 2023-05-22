@@ -5,7 +5,7 @@ all: compile
 
 compile:
 	elmerf90 boxmodel_solver_t.F90 -o boxmodel_solver $(LFLAGS) $(IFLAGS)
-	elmerf90 IceFrontLocation.F90 -o IceFrontLocation
-	elmerf90 FrontThickness_mask.F90 -o FrontThickness_mask
-	elmerf90 USF_CondFront.F90  -o  USF_CondFront 
-	elmerf90 USF_CondDistance.F90 -o USF_CondDistance
+	#elmerf90 IceFrontLocation.F90 -o IceFrontLocation
+	#elmerf90 FrontThickness_mask.F90 -o FrontThickness_mask
+	#elmerf90 USF_CondFront.F90  -o  USF_CondFront 
+	#elmerf90 USF_CondDistance.F90 -o USF_CondDistance
