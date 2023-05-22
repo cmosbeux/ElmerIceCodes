@@ -144,7 +144,6 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
 
      ! - Grounding line :
      llGL=ListGetLogical( Params, 'Grounding Line Melt', UnFoundFatal=UnFoundFatal )
-     
      ! - PanAntarctic or Regional (important for the number of basins)
      PanAntarctic = ListGetLogical( Params, 'PanAntarctic', UnFoundFatal=UnFoundFatal )
 
