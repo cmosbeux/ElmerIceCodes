@@ -4,8 +4,8 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   !USE MeshUtils
   USE Netcdf
   USE DefUtils
-  USE Frontmask
-  USE FrontThickness_mask
+  !USE Frontmask
+  !USE FrontThickness_mask
 
   IMPLICIT NONE
   !------------------------------------------------------------------------------
@@ -17,7 +17,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   !------------------------------------------------------------------------------
   !    Local variables
   !------------------------------------------------------------------------------
-  CHARACTER(LEN=MAX_NAME_LEN) :: SolverName='PICO'
+  CHARACTER(LEN=MAX_NAME_LEN) :: SolverName='PICO', DepthName
 
   TYPE(Mesh_t),POINTER :: Mesh
   TYPE(ValueList_t), POINTER :: Params
@@ -52,7 +52,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   !! Physical Parameters
   REAL(KIND=dp), SAVE :: sealevel, lbd1, lbd2, lbd3, meltfac, K, gT,  rhostar, CC,beta, alpha, mskcrit
   INTEGER, SAVE :: boxmax,MaxBas
-  LOGICAL :: llGL
+  LOGICAL :: llGL, PanAntarctic
 
   REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE, SAVE :: S_mean, T_mean
   REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE,SAVE :: Zbox,Abox,Tbox,Sbox,Mbox
@@ -112,9 +112,17 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   GMPerm => GMVar % Perm
   GM => GMVar % Values
 
-  DepthVar => VariableGet( Model % Mesh % Variables, 'Zb', UnFoundFatal=.TRUE.)
-  DepthPerm => DepthVar % Perm
-  DepthVal => DepthVar % Values
+  !---- MODIFY FOR STOKES
+  DepthName = ListGetString(Params, 'Bottom Surface Variable Name', UnFoundFatal=.TRUE.)
+  DepthVar => VariableGet( Model % Mesh % Variables, DepthName,UnFoundFatal=.TRUE.)
+  IF (.NOT.ASSOCIATED(DepthVar)) &
+       &    CALL FATAL(SolverName,'>Bottom Surface Variable Name< not found')
+  !----
+
+!  DepthVar => VariableGet( Model % Mesh % Variables, 'Zb', UnFoundFatal=.TRUE.)
+!  DepthPerm => DepthVar % Perm
+!  DepthVal => DepthVar % Values
+
 
   distGLVar => VariableGet( Model % Mesh % Variables, 'distGL',UnFoundFatal=.TRUE.)
   distGLPerm => distGLVar % Perm
@@ -136,6 +144,9 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
 
      ! - Grounding line :
      llGL=ListGetLogical( Params, 'Grounding Line Melt', UnFoundFatal=UnFoundFatal )
+     
+     ! - PanAntarctic or Regional (important for the number of basins)
+     PanAntarctic = ListGetLogical( Params, 'PanAntarctic', UnFoundFatal=UnFoundFatal )
 
      !- General :
      sealevel = ListGetCReal( Model % Constants, 'Sea Level', UnFoundFatal = UnFoundFatal )
@@ -152,9 +163,12 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
      rhostar  = ListGetCReal( Model % Constants, 'In Situ Density EOS', UnFoundFatal = UnFoundFatal )
      meltfac  = ListGetCReal( Model % Constants, 'Melt Factor', UnFoundFatal = UnFoundFatal )     
  
-     Parallel = (ParEnv %PEs > 1)
-
+     
+     !cy: orignal version look at the maximal basin number and loop over the basins. this works for PanAntarctic
+     ! simulations but not for region simulations where we do not simulate all the basins
      maxbastmp=MAXVAL(NINT(Basin))
+
+     Parallel = (ParEnv %PEs > 1)
      IF (Parallel) THEN
         CALL MPI_ALLREDUCE(maxbastmp,MaxBas,1,MPI_INTEGER,MPI_MAX,ELMER_COMM_WORLD,ierr)
      ELSE
@@ -171,7 +185,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
 
 
      !!------------------------------------------------------------------------------
-     ! Get forcings 
+     ! GET FORCINGS
      !!------------------------------------------------------------------------------     
 
      DataFT = ListGetString( Params, 'data file', Found, UnFoundFatal )
@@ -181,9 +195,13 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
         CALL Fatal(Trim(SolverName), &
            "dim <number_of_basins> not found")
      ENDIF
+
      NetCDFstatus = nf90_inquire_dimension( ncid, tmeanid , len = nlen )
-     IF (nlen.NE.MaxBas) & 
-        CALL Fatal(Trim(SolverName),"number of basins do not agree")
+     IF (nlen.NE.MaxBas .AND. PanAntarctic) THEN
+       CALL Fatal(Trim(SolverName),"number of basins do not agree")
+     ELSE
+       CALL INFO(Trim(SolverName),'Regional simulation', Level =5)
+     ENDIF
 
      !!! check if we have a time dimension
      NetCDFstatus = nf90_inq_dimid( ncid, 'time' , varid)
@@ -228,6 +246,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
      ENDif
      CALL INFO(Trim(SolverName),'END FIRST TIME', Level =5)
   END IF
+
   CALL INFO(Trim(SolverName),'START', Level =5)
 
   Depth = sealevel - DepthVal     ! Depth < 0 under sea level
@@ -265,51 +284,70 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   melt(:)=0.0_dp
   localunity(:) = 0.0_dp
   rr(:)=0.0
+
+  !!------------------------------------------------------------------------------
+  ! DEFINE BOXES FOR EACH BASIN
+  !!------------------------------------------------------------------------------
   
   CALL INFO(Trim(SolverName),'START BOXES', Level =5)
   ! first loop on element to determine the number of boxes per basins
   DO e=1,Solver % NumberOfActiveElements
+
      Element => GetActiveElement(e)
      n = GetElementNOFNodes()
      NodeIndexes => Element % NodeIndexes
      Indexx = Element % ElementIndex
+    
+     ! check if floating or melting (look at groundedmask)
      IF ( ANY( GM(GMPerm(NodeIndexes(:))) .GE. mskcrit ) ) CYCLE
      b = NINT(Basin(BasinPerm(Indexx)))
 
-     dmax=MAXVAL(distGL(distGLPerm(NodeIndexes(1:n))))
+     ! check maximal distance to GL at current element (for each basin)
+     dmax = MAXVAL(distGL(distGLPerm(NodeIndexes(1:n))))
      IF (basinmax(b) < dmax ) THEN
         basinmax(b)=dmax
      END IF
 
-     dmax= MAXVAL(distGL(distGLPerm(NodeIndexes(1:n))))
+     !check maximal distance to GL for all the basins
+     dmax = MAXVAL(distGL(distGLPerm(NodeIndexes(1:n))))
      IF (distmax < dmax) THEN
         distmax = dmax
      END IF
   END DO
+
   IF (Parallel) THEN
-     CALL MPI_ALLREDUCE(distmax,max_Reduced,1,MPI_DOUBLE_PRECISION,MPI_MAX,ELMER_COMM_WORLD,ierr)
-     distmax= max_Reduced
+    CALL MPI_ALLREDUCE(distmax,max_Reduced,1,MPI_DOUBLE_PRECISION,MPI_MAX,ELMER_COMM_WORLD,ierr)
+    distmax= max_Reduced
+
+    CALL MPI_ALLREDUCE(basinmax,basin_Reduced,MaxBas,MPI_DOUBLE_PRECISION,MPI_MAX,ELMER_COMM_WORLD,ierr)
+    basinmax(1:MaxBas) = basin_Reduced(1:MaxBas)
   END IF
-  IF (Parallel) THEN
-   CALL MPI_ALLREDUCE(basinmax,basin_Reduced,MaxBas,MPI_DOUBLE_PRECISION,MPI_MAX,ELMER_COMM_WORLD,ierr)
-   basinmax(1:MaxBas) = basin_Reduced(1:MaxBas)
-  END IF
- 
+  
+  !compute the number of boxes per basin (Eq. (9) in Reese et al., 2018)
   boxes = 1+NINT(SQRT(basinmax/distmax)*(boxmax-1))
 
   CALL INFO(TRIM(SolverName),'Boxes DONE', Level =5)
-  !- Calculate total area of each box :
+
+
+  !!------------------------------------------------------------------------------
+  ! DEFINE BOXES FOR EACH BASIN
+  !!------------------------------------------------------------------------------
+  !- Calculate total area of each box (Ak in Reese et al., 2018):
   ! second loop on element
+  CALL INFO(TRIM(SolverName),'START Area Computation', Level = 5)
+
   DO e=1,Solver % NumberOfActiveElements
+
      Element => GetActiveElement(e)
      CALL GetElementNodes( ElementNodes )
      n = GetElementNOFNodes()
      NodeIndexes => Element % NodeIndexes
      Indexx = Element % ElementIndex
 
-     IF ( ANY( GM(GMPerm(NodeIndexes(:))) .GE. mskcrit ) ) CYCLE      ! leave the loop if grounded point in the element
-     b= NINT(Basin(BasinPerm(Indexx)))
+     IF ( ANY( GM(GMPerm(NodeIndexes(:))) .GE. mskcrit ) ) CYCLE    ! leave the loop if grounded point in the element
+     b = NINT(Basin(BasinPerm(Indexx))) !basin to concider
      nD=boxes(b)
+     !non dimensional relative distance to the GL (Eq. (10) in Reese et al., 2018)
      rr(Indexx) = (SUM(distGL(distGLPerm(NodeIndexes(:))))/MAX(1,SIZE(distGL(distGLPerm(NodeIndexes(:))))))   &
           &             / (SUM( distGL(distGLPerm(NodeIndexes(:)))) / MAX(1,SIZE(distGL(distGLPerm(NodeIndexes(:))))) &
           & + SUM( distIF(distIFPerm(NodeIndexes(:)))) / MAX(1,SIZE(distGL(distGLPerm(NodeIndexes(:))))))
@@ -321,17 +359,19 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
         stat = ElementInfo(Element,ElementNodes,U,V,W,SqrtElementMetric, &
              Basis,dBasisdx )
         s = SqrtElementMetric * IntegStuff % s(t)
-        localunity(Indexx) = localunity(Indexx) + s * SUM(Basis(1:n))
+        localunity(Indexx) = localunity(Indexx) + s * SUM(Basis(1:n)) ! surface of the element
      END DO
+
+    ! check cond for box interation with grid cell coordinate (Eq. (11))
      DO kk=1,nD
         IF ( rr(Indexx) .GT. 1.0-SQRT(1.0*(nD-kk+1)/nD) .AND. rr(Indexx) .LE. 1.0-SQRT(1.0*(nD-kk)/nD) ) THEN
-           Abox(kk,b) = Abox(kk,b) + localunity(Indexx)
+           Abox(kk,b) = Abox(kk,b) + localunity(Indexx)  !air of box kk in basin b
            Boxnumber(BPerm(Indexx))=kk
         ENDIF
      ENDDO
-  END DO
+  END DO  !end of loop on elements
 
-
+  ! cm: Here we do a loop over the number of basins. Works for (1,...,Nmax) but not for, e.g., (3,7,12)
   DO b=1,MaxBas
      nD=boxes(b)
      DO kk=1,nD
