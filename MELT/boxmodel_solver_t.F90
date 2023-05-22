@@ -118,10 +118,9 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   IF (.NOT.ASSOCIATED(DepthVar)) &
        &    CALL FATAL(SolverName,'>Bottom Surface Variable Name< not found')
   !----
-
-!  DepthVar => VariableGet( Model % Mesh % Variables, 'Zb', UnFoundFatal=.TRUE.)
-!  DepthPerm => DepthVar % Perm
-!  DepthVal => DepthVar % Values
+  ! DepthVar => VariableGet( Model % Mesh % Variables, 'Zb', UnFoundFatal=.TRUE.)
+  DepthPerm => DepthVar % Perm
+  DepthVal => DepthVar % Values
 
 
   distGLVar => VariableGet( Model % Mesh % Variables, 'distGL',UnFoundFatal=.TRUE.)
