@@ -42,7 +42,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   INTEGER :: NetcdfStatus,varid,ncid
   CHARACTER(LEN=MAX_NAME_LEN) :: DataFT, DataFS
   INTEGER :: tmeanid, nlen
-  INTEGER,SAVE :: nTime
+  INTEGER,SAVE :: nTime, DIM
   INTEGER :: nTime2
 
   INTEGER,SAVE :: VisitedTimes=0
@@ -85,28 +85,71 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   Mesh => Model % Mesh
 
   Nmax = Solver % Mesh % NumberOfNodes
-
+  
+  
   
   !------------------------------------------------------------------------------
   ! Get mandatory variables
   !------------------------------------------------------------------------------
-  BasinVar => VariableGet( Model % Mesh % Variables, 'basins',UnFoundFatal=.TRUE.)
-  IF ( BasinVar % TYPE .NE. Variable_on_elements) &
-       &   CALL FATAL(SolverName,'basins is not a variable on elements')
+  
+  !In 3D, elemental values are not defined on the boundary elements.
+  !fix: use nodal variables in 3D
+!  DIM = CoordinateSystemDimension()
+!
+!  BasinVar => VariableGet( Model % Mesh % Variables,'Basins',UnFoundFatal=.TRUE.)
+!  IF ( DIM .EQ. 3 .AND. BasinVar % TYPE .EQ. Variable_on_elements) THEN
+!    CALL FATAL(SolverName,'Elemental variables on boundary do not work in 3D')
+!  ELSEIF ( BasinVar % TYPE .NE. Variable_on_elements .AND. DIM .NE. 3) THEN
+!    CALL FATAL(SolverName,'Basins is not a variable on elements')
+!  ENDIF
+!  BasinPerm => BasinVar % Perm
+!  Basin => BasinVar % Values
+!
+!  !BoxVar => VariableGet( Model % Mesh % Variables,'Boxes',UnFoundFatal=.TRUE.)
+!  !IF ( BoxVar % TYPE .NE. Variable_on_elements) &
+!  !   &   CALL FATAL(SolverName,'Boxes is not a variable on elements')
+!  BoxVar => VariableGet( Model % Mesh % Variables,'Boxes',UnFoundFatal=.TRUE.)
+!  IF ( DIM .EQ. 3 .AND. BoxVar % TYPE .EQ. Variable_on_elements) THEN
+!    CALL FATAL(SolverName,'Elemental variables on boundary do not work in 3D')
+!  ELSEIF ( BoxVar % TYPE .NE. Variable_on_elements .AND. DIM .NE. 3) THEN
+!    CALL FATAL(SolverName,'Boxes is not a variable on elements')
+!  ENDIF
+!  BPerm => BoxVar % Perm
+!  Boxnumber  => BoxVar % Values
+!
+!  MeltVar => VariableGet( Model % Mesh % Variables, 'Melt',UnFoundFatal=.TRUE.)
+!  IF ( DIM .EQ. 3 .AND. MeltVar % TYPE .EQ. Variable_on_elements) THEN
+!    CALL FATAL(SolverName,'Elemental variables on boundary do not work in 3D')
+!  ELSEIF ( MeltVar % TYPE .NE. Variable_on_elements .AND. DIM .NE. 3) THEN
+!    CALL FATAL(SolverName,'Melt is not a variable on elements')
+!  ENDIF
+!  MeltPerm => MeltVar % Perm
+!  Melt => MeltVar % Values
+
+  DIM = CoordinateSystemDimension()
+
+  BasinVar => VariableGet(Model % Mesh % Variables, 'Basins', UnFoundFatal=.TRUE.)
   BasinPerm => BasinVar % Perm
   Basin => BasinVar % Values
 
-  BoxVar => VariableGet( Model % Mesh % Variables, 'Boxes',UnFoundFatal=.TRUE.)
-  IF ( BoxVar % TYPE .NE. Variable_on_elements) &
-       &   CALL FATAL(SolverName,'Boxes is not a variable on elements')
+  BoxVar => VariableGet(Model % Mesh % Variables, 'Boxes', UnFoundFatal=.TRUE.)
   BPerm => BoxVar % Perm
-  Boxnumber  => BoxVar % Values
+  Boxnumber => BoxVar % Values
 
-  MeltVar => VariableGet( Model % Mesh % Variables, 'Melt',UnFoundFatal=.TRUE.)
-  IF (MeltVar % TYPE .NE. Variable_on_elements) &
-       &   CALL FATAL(SolverName,'Melt is not a variable on elements') 
+  MeltVar => VariableGet(Model % Mesh % Variables, 'Melt', UnFoundFatal=.TRUE.)
   MeltPerm => MeltVar % Perm
   Melt => MeltVar % Values
+
+  IF (DIM == 3) THEN
+    IF (BasinVar % TYPE == Variable_on_elements .OR. BoxVar % TYPE == Variable_on_elements &
+       & .OR. MeltVar % TYPE == Variable_on_elements) THEN
+         CALL FATAL(SolverName, 'Elemental variables on boundary do not work in 3D')
+    END IF
+  ELSE IF (BasinVar % TYPE /= Variable_on_elements .OR. BoxVar % TYPE /= Variable_on_elements &
+     & .OR. MeltVar % TYPE /= Variable_on_elements) THEN
+       CALL FATAL(SolverName, 'Basins, Boxes, or Melt is not a variable on elements')
+  END IF
+
 
   GMVar => VariableGet( Model % Mesh % Variables, 'GroundedMask',UnFoundFatal=.TRUE.)
   GMPerm => GMVar % Perm
@@ -288,6 +331,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   !!------------------------------------------------------------------------------
   
   CALL INFO(Trim(SolverName),'START BOXES', Level =5)
+
   ! first loop on element to determine the number of boxes per basins
   DO e=1,Solver % NumberOfActiveElements
 
@@ -324,14 +368,14 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   !compute the number of boxes per basin (Eq. (9) in Reese et al., 2018)
   boxes = 1+NINT(SQRT(basinmax/distmax)*(boxmax-1))
 
-  CALL INFO(TRIM(SolverName),'Boxes DONE', Level =5)
-
+  !write(*,*) b, boxmax, distmax
+  CALL INFO(TRIM(SolverName),'BOXES DONE', Level =5)
 
   !!------------------------------------------------------------------------------
   ! DEFINE BOXES FOR EACH BASIN
   !!------------------------------------------------------------------------------
   !- Calculate total area of each box (Ak in Reese et al., 2018):
-  ! second loop on element
+  ! second loop on elements
   CALL INFO(TRIM(SolverName),'START Area Computation', Level = 5)
 
   DO e=1,Solver % NumberOfActiveElements
@@ -379,39 +423,48 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
         END IF
      ENDDO
   END DO
+  
 
-  ! third loop on element
+  !write(*,*) Abox(1,14)
+  CALL INFO(TRIM(SolverName),'Area Computation DONE', Level = 5)
+
+  !!------------------------------------------------------------------------------
+  ! COMPUTE THE MELT IN BOXE 1 (based on input parameters and depth)
+  !!------------------------------------------------------------------------------
+  ! Compute Tbox, Sbox and qqq and melt for each element of the first box (B1)
+  ! We solve for x = -g1.(Tstar + x - ay) and   (Eqs. A6 and A7)
+  ! third loop on elements
+  CALL INFO(TRIM(SolverName),'STARTING Melt Boxe 1', Level = 5)
   Tbox(:,:)=0.d0 ; Sbox(:,:)=0.d0 ; qqq(:)=0.d0
   DO e=1,Solver % NumberOfActiveElements
-     Element => GetActiveElement(e)
-     n = GetElementNOFNodes()
-     NodeIndexes => Element % NodeIndexes
-     Indexx = Element % ElementIndex
-
-     IF (  Boxnumber(BPerm(Indexx))==1 ) THEN
-        b= NINT(Basin(BasinPerm(Indexx)))
-        zzz=SUM(Depth(DepthPerm(NodeIndexes(1:n))))/n !mean depth of an element
-        Tstar = lbd1*S0(b) + lbd2 + lbd3*zzz - T0(b)  !NB: Tstar should be < 0
-        g1 = gT * Abox(1,b)
-        tmp1 = g1 / (CC*rhostar*(beta*S0(b)*meltfac-alpha))
-        sn = (0.5*tmp1)**2 - tmp1*Tstar
-        ! to avoid negative discriminent (no solution for x otherwise) :
-        IF( sn .lt. 0.d0 ) THEN
-           xbox = 0.d0
-        else
-           xbox = - 0.5*tmp1 + SQRT(sn) ! standard solution (Reese et al)
-        ENDif
-        TT = T0(b) - xbox
-        SS = S0(b) - xbox*S0(b)*meltfac
-        Tbox(1,b) = Tbox(1,b) + TT * localunity(Indexx)
-        Sbox(1,b) = Sbox(1,b) + SS * localunity(Indexx)
-        qqq(b) = qqq(b) + CC*rhostar*(beta*(S0(b)-SS)-alpha*(T0(b)-TT)) * localunity(Indexx)
-        Melt(MeltPerm(Indexx)) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )
-        totalmelt=totalmelt+Melt(MeltPerm(Indexx))* localunity(Indexx)
-
-  END IF
-
+    Element => GetActiveElement(e)
+    n = GetElementNOFNodes()
+    NodeIndexes => Element % NodeIndexes
+    Indexx = Element % ElementIndex
+    !Only for first box
+    IF (  Boxnumber(BPerm(Indexx))==1 ) THEN
+      b= NINT(Basin(BasinPerm(Indexx)))
+      zzz=SUM(Depth(DepthPerm(NodeIndexes(1:n))))/n !mean depth of an element
+      Tstar = lbd1*S0(b) + lbd2 + lbd3*zzz - T0(b)  !NB: Tstar should be < 0
+      g1 = gT * Abox(1,b)
+      tmp1 = g1 / (CC*rhostar*(beta*S0(b)*meltfac-alpha))
+      sn = (0.5*tmp1)**2 - tmp1*Tstar
+      ! to avoid negative discriminent (no solution for x otherwise) :
+      IF( sn .lt. 0.d0 ) THEN
+        xbox = 0.d0
+      ElSE
+        xbox = - 0.5*tmp1 + SQRT(sn) ! standard solution (Reese et al)
+      ENDIF
+      TT = T0(b) - xbox
+      SS = S0(b) - xbox*S0(b)*meltfac
+      Tbox(1,b) = Tbox(1,b) + TT * localunity(Indexx)
+      Sbox(1,b) = Sbox(1,b) + SS * localunity(Indexx)
+      qqq(b) = qqq(b) + CC*rhostar*(beta*(S0(b)-SS)-alpha*(T0(b)-TT)) * localunity(Indexx)
+      Melt(MeltPerm(Indexx)) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )
+      totalmelt = totalmelt + Melt(MeltPerm(Indexx)) * localunity(Indexx)
+    END IF
   END DO
+   
   DO b=1,MaxBas
      nD=boxes(b)
 
@@ -429,8 +482,14 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   Sbox(1,1:MaxBas) = Sbox(1,1:MaxBas) / Abox(1,1:MaxBas)
   qqq(1:MaxBas) = qqq(1:MaxBas) / Abox(1,1:MaxBas)
 
-  !- Temperature and salinity in possible other boxes :
-  ! 4 loops on the element
+  CALL INFO(TRIM(SolverName),'Melt Boxe 1 DONE', Level = 5)
+
+  !!------------------------------------------------------------------------------
+  ! COMPUTE THE MELT IN OTHER BOXES (based on input parameters and depth)
+  !!------------------------------------------------------------------------------
+  ! Temperature, salinity and melt in possible other boxes (B2,...,Bn)
+  ! 4 loops on the elements
+  CALL INFO(TRIM(SolverName),'START Melt Other Boxes', Level = 5)
   DO kk=2,boxmax
      DO e=1,Solver % NumberOfActiveElements
         Element => GetActiveElement(e)
@@ -439,7 +498,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
         Indexx = Element % ElementIndex
 
         IF (  Boxnumber(BPerm(Indexx))==kk ) THEN
-           b= NINT(Basin(BasinPerm(Indexx)))
+           b = NINT(Basin(BasinPerm(Indexx)))
            zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/n !mean depth of an element
            Tstar = lbd1*Sbox(kk-1,b) + lbd2 + lbd3*zzz - Tbox(kk-1,b)
            g1  = gT * Abox(kk,b)
@@ -450,9 +509,10 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
            Tbox(kk,b) =  Tbox(kk,b) + TT * localunity(Indexx)
            Sbox(kk,b) =  Sbox(kk,b) + SS * localunity(Indexx)
            Melt(MeltPerm(Indexx)) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )
-           totalmelt=totalmelt+Melt(MeltPerm(Indexx))* localunity(Indexx)
+           totalmelt = totalmelt+Melt(MeltPerm(Indexx)) * localunity(Indexx)
         END IF
      END DO
+
      DO b=1,MaxBas
         nD=boxes(b)
         IF (Parallel) THEN
@@ -471,6 +531,9 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   ELSE
      Integ_Reduced = TotalMelt
   ENDIF
+
+  CALL INFO(TRIM(SolverName),'Melt Other Boxes DONE', Level = 5)
+
   CALL INFO(SolverName,"----------------------------------------",Level=1)
   WRITE(meltValue,'(F20.2)') Integ_Reduced*0.917/1.0e9
   Message='PICO INTEGRATED BASAL MELT [Gt/a]: '//meltValue ! 0.917/1.0e6 to convert m3/a in Gt/a

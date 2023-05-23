@@ -41,7 +41,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
 
   INTEGER :: node,  e, t, n, i, j,  knd, kk, ii,  b,  ierr,  NetcdfStatus,varid,ncid
   INTEGER :: status(MPI_STATUS_SIZE)
-  INTEGER :: maxbastmp, nD
+  INTEGER :: maxbastmp, nD,DIM
 
   REAL(KIND=dp) :: localInteg, Integ, Integ_Reduced, zzz, tmp1, xbox, Tstar,   &
        &                 Area_Reduced, g1, g2,nn,   &
@@ -271,7 +271,6 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
      
      ! -check if floating or melting (look at groundedmask)
      IF ( ANY( GM(GMPerm(NodeIndexes(:))) .GE. mskcrit ) ) CYCLE
-     
      
      !b = NINT(Basin(BasinPerm(Indexx)))
      !IF (b.LT.1 .OR. b.GT.18) CYCLE !basin number > 0 & <19
