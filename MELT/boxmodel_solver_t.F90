@@ -223,7 +223,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
      !! ALLOCATE arrays with mesh dimensions
      !ALLOCATE(rr(Solver % NumberOfActiveElements), localunity(Solver % NumberOfActiveElements), Basis(Model % MaxElementNodes), dBasisdx(Model % MaxElementNodes,3))
      !cy: changed allocation for nodal variables
-     ALLOCATE(VisitedNode(Nmax),rr(Nmax),localunity(Nmax),Basis(Model % MaxElementNodes), dBasisdx(Model % MaxElementNodes,3))
+     ALLOCATE(rr(Nmax),localunity(Nmax),Basis(Model % MaxElementNodes), dBasisdx(Model % MaxElementNodes,3))
      Allocate (Depth(SIZE(DepthVal)))
 
 
@@ -387,7 +387,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   DO e=1,Solver % NumberOfActiveElements
 
      Element => GetActiveElement(e)
-     !CALL GetElementNodes( ElementNodes )
+     CALL GetElementNodes( ElementNodes, Element, Solver )
      n = GetElementNOFNodes()
      NodeIndexes => Element % NodeIndexes
      Indexx = Element % ElementIndex
@@ -408,7 +408,6 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
      ENDIF
      
      nD=boxes(b)
-      
      
      IntegStuff = GaussPoints( Element )
      DO t=1,IntegStuff % n
@@ -441,6 +440,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
           Boxnumber(BPerm(Indexx)) = kk
         ENDIF
       ENDDO
+    ENDIF
   END DO  !end of loop on elements
   
   ! cm: Here we do a loop over the number of basins. Works for (1,...,Nmax) but not for, e.g., (3,7,12)
@@ -449,7 +449,6 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
       b = 14
       nD=boxes(b)
       DO kk=1,nD
-        write(*,*) kk,b, Abox(kk,b)
         CALL MPI_ALLREDUCE(Abox(kk,b),Area_Reduced,1,MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
         Abox(kk,b) = Area_Reduced
       ENDDO
@@ -458,11 +457,6 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
 
   
   CALL INFO(TRIM(SolverName),'Area Computation DONE', Level = 5)
-  CALL INFO(SolverName,"----------------------------------------",Level=1)
-  WRITE(meltValue,'(F20.2)') Integ_Reduced*0.917/1.0e9
-  Message='PICO INTEGRATED BASAL MELT [Gt/a]: '//meltValue ! 0.917/1.0e6 to convert m3/a in Gt/a
-  CALL INFO(SolverName,Message,Level=1)
-  CALL INFO(SolverName,"----------------------------------------",Level=1)
   
   !!------------------------------------------------------------------------------
   ! 4 - COMPUTE THE MELT IN BOXE 1 (based on input parameters and depth)
@@ -478,51 +472,63 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
     NodeIndexes => Element % NodeIndexes
     Indexx = Element % ElementIndex
     !Only for first box
-    IF (  Boxnumber(BPerm(Indexx))==1 ) THEN
-      IF (DIM .EQ. 3) THEN
+    IF (DIM .EQ. 3) THEN
+      IF (MAXVAL(Boxnumber(BPerm(NodeIndexes(1:n))))==1 ) THEN
         b = NINT(MAXVAL(Basin(BasinPerm(NodeIndexes(1:n)))))
-      ELSE
-        b = NINT(Basin(BasinPerm(Indexx)))
-      ENDIF
-    
-      zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/n !mean depth of an element
-      Tstar = lbd1*S0(b) + lbd2 + lbd3*zzz - T0(b)  !NB: Tstar should be < 0
-      g1 = gT * Abox(1,b)
-      tmp1 = g1 / (CC*rhostar*(beta*S0(b)*meltfac-alpha))
-      sn = (0.5*tmp1)**2 - tmp1*Tstar
-      ! to avoid negative discriminent (no solution for x otherwise) :
-      IF( sn .lt. 0.d0 ) THEN
-        xbox = 0.d0
-      ElSE
-        xbox = - 0.5*tmp1 + SQRT(sn) ! standard solution (Reese et al)
-      ENDIF
-      TT = T0(b) - xbox
-      SS = S0(b) - xbox*S0(b)*meltfac
-      IF (DIM .EQ. 3) THEN
+        zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/n !mean depth of an element
+        Tstar = lbd1*S0(b) + lbd2 + lbd3*zzz - T0(b)  !NB: Tstar should be < 0
+        g1 = gT * Abox(1,b)
+        tmp1 = g1 / (CC*rhostar*(beta*S0(b)*meltfac-alpha))
+        sn = (0.5*tmp1)**2 - tmp1*Tstar
+        ! to avoid negative discriminent (no solution for x otherwise) :
+        IF( sn .lt. 0.d0 ) THEN
+          xbox = 0.d0
+        ElSE
+          xbox = - 0.5*tmp1 + SQRT(sn) ! standard solution (Reese et al)
+        ENDIF
+        TT = T0(b) - xbox
+        SS = S0(b) - xbox*S0(b)*meltfac
         Tbox(1,b) = Tbox(1,b) + TT *  SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
         Sbox(1,b) = Sbox(1,b) + SS *  SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
         qqq(b) = qqq(b) + CC*rhostar*(beta*(S0(b)-SS)-alpha*(T0(b)-TT)) *  SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:)) !flux (per basin)
         Melt(MeltPerm(NodeIndexes(1:n))) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )
         totalmelt=totalmelt+SUM(Melt(MeltPerm(NodeIndexes(1:n))))/SIZE(NodeIndexes(:)) * SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
-      ELSE
+      ENDIF
+    ELSE 
+      IF (  Boxnumber(BPerm(Indexx))==1 ) THEN
+        b = NINT(Basin(BasinPerm(Indexx)))
+        zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/n !mean depth of an element
+        Tstar = lbd1*S0(b) + lbd2 + lbd3*zzz - T0(b)  !NB: Tstar should be < 0
+        g1 = gT * Abox(1,b)
+        tmp1 = g1 / (CC*rhostar*(beta*S0(b)*meltfac-alpha))
+        sn = (0.5*tmp1)**2 - tmp1*Tstar
+        ! to avoid negative discriminent (no solution for x otherwise) :
+        IF( sn .lt. 0.d0 ) THEN
+          xbox = 0.d0
+        ElSE
+          xbox = - 0.5*tmp1 + SQRT(sn) ! standard solution (Reese et al)
+        ENDIF
+        TT = T0(b) - xbox
+        SS = S0(b) - xbox*S0(b)*meltfac
         Tbox(1,b) = Tbox(1,b) + TT * localunity(Indexx)
         Sbox(1,b) = Sbox(1,b) + SS * localunity(Indexx)
         qqq(b) = qqq(b) + CC*rhostar*(beta*(S0(b)-SS)-alpha*(T0(b)-TT)) * localunity(Indexx)
         Melt(MeltPerm(Indexx)) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )
         totalmelt = totalmelt + Melt(MeltPerm(Indexx)) * localunity(Indexx)
+      ENDIF 
     END IF
   END DO
    
   DO b=1,MaxBas
-     nD=boxes(b)
+    nD=boxes(b)
 
-     IF (Parallel) THEN
-        CALL MPI_ALLREDUCE(Tbox(1,b),Integ_Reduced,1,MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
-        CALL MPI_ALLREDUCE(Sbox(1,b),Area_Reduced,1,MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
-        CALL MPI_ALLREDUCE(qqq(b),qqq_Reduced,1,MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
-        Tbox(1,b) = Integ_Reduced
-        Sbox(1,b) = Area_Reduced
-        qqq(b) = qqq_Reduced
+    IF (Parallel) THEN
+      CALL MPI_ALLREDUCE(Tbox(1,b),Integ_Reduced,1,MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
+      CALL MPI_ALLREDUCE(Sbox(1,b),Area_Reduced,1,MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
+      CALL MPI_ALLREDUCE(qqq(b),qqq_Reduced,1,MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
+      Tbox(1,b) = Integ_Reduced
+      Sbox(1,b) = Area_Reduced
+      qqq(b) = qqq_Reduced
      END IF
   ENDDO
 
@@ -545,25 +551,31 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
         NodeIndexes => Element % NodeIndexes
         Indexx = Element % ElementIndex
 
-        IF (  Boxnumber(BPerm(Indexx))==kk ) THEN
-          IF (DIM .EQ. 3) THEN
+        IF (DIM .EQ. 3) THEN
+          IF (MAXVAL(Boxnumber(BPerm(NodeIndexes(1:n))))==1 ) THEN
             b = NINT(MAXVAL(Basin(BasinPerm(NodeIndexes(1:n)))))
-          ELSE
-            b = NINT(Basin(BasinPerm(Indexx)))
-          ENDIF
-          zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/n !mean depth of an element
-          Tstar = lbd1*Sbox(kk-1,b) + lbd2 + lbd3*zzz - Tbox(kk-1,b)
-          g1  = gT * Abox(kk,b)
-          g2  = g1 * meltfac
-          xbox = - g1 * Tstar / ( qqq(b) + g1 - g2*lbd1*Sbox(kk-1,b) )
-          TT = Tbox(kk-1,b) - xbox
-          SS = Sbox(kk-1,b) - xbox*Sbox(kk-1,b)*meltfac
-          IF (DIM .EQ. 3) THEN
+            zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/n !mean depth of an element
+            Tstar = lbd1*Sbox(kk-1,b) + lbd2 + lbd3*zzz - Tbox(kk-1,b)
+            g1  = gT * Abox(kk,b)
+            g2  = g1 * meltfac
+            xbox = - g1 * Tstar / ( qqq(b) + g1 - g2*lbd1*Sbox(kk-1,b) )
+            TT = Tbox(kk-1,b) - xbox
+            SS = Sbox(kk-1,b) - xbox*Sbox(kk-1,b)*meltfac
             Tbox(kk,b) =  Tbox(kk,b) + TT * SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
             Sbox(kk,b) =  Sbox(kk,b) + SS * SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
             Melt(MeltPerm(NodeIndexes(1:n))) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT)
             totalmelt=totalmelt+SUM(Melt(MeltPerm(NodeIndexes(1:n))))/SIZE(NodeIndexes(:)) * SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
-          ELSE
+          ENDIF
+        ELSE
+          IF ( Boxnumber(BPerm(Indexx))==kk ) THEN
+            b = NINT(Basin(BasinPerm(Indexx)))
+            zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/n !mean depth of an element
+            Tstar = lbd1*Sbox(kk-1,b) + lbd2 + lbd3*zzz - Tbox(kk-1,b)
+            g1  = gT * Abox(kk,b)
+            g2  = g1 * meltfac
+            xbox = - g1 * Tstar / ( qqq(b) + g1 - g2*lbd1*Sbox(kk-1,b) )
+            TT = Tbox(kk-1,b) - xbox
+            SS = Sbox(kk-1,b) - xbox*Sbox(kk-1,b)*meltfac
             Tbox(kk,b) =  Tbox(kk,b) + TT * localunity(Indexx)
             Sbox(kk,b) =  Sbox(kk,b) + SS * localunity(Indexx)
             Melt(MeltPerm(Indexx)) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )
@@ -603,5 +615,4 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   Melt=-Melt
 
 END SUBROUTINE boxmodel_solver
-
 
