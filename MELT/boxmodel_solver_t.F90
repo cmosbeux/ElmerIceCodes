@@ -179,7 +179,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
      CALL FATAL(SolverName,'Mesh has changed not supported ...')
 
   !------------------------------------------------------------------------------
-  ! 1- Initialisation, Read constants and parameters of the simulation :
+  ! 1 - Initialisation, Read constants and parameters of the simulation :
   !------------------------------------------------------------------------------
   IF (Firsttime) THEN
      Firsttime=.False.
@@ -221,7 +221,9 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
      ALLOCATE(basin_Reduced(MaxBas),basinmax(MaxBas),boxes(MaxBas))
 
      !! ALLOCATE arrays with mesh dimensions
-     ALLOCATE(rr(Solver % NumberOfActiveElements),localunity(Solver % NumberOfActiveElements),Basis(Model % MaxElementNodes), dBasisdx(Model % MaxElementNodes,3))
+     !ALLOCATE(rr(Solver % NumberOfActiveElements), localunity(Solver % NumberOfActiveElements), Basis(Model % MaxElementNodes), dBasisdx(Model % MaxElementNodes,3))
+     !cy: changed allocation for nodal variables
+     ALLOCATE(VisitedNode(Nmax),rr(Nmax),localunity(Nmax),Basis(Model % MaxElementNodes), dBasisdx(Model % MaxElementNodes,3))
      Allocate (Depth(SIZE(DepthVal)))
 
 
@@ -327,7 +329,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   rr(:)=0.0
 
   !!------------------------------------------------------------------------------
-  ! DEFINE BOXES FOR EACH BASIN
+  ! 2 - DEFINE BOXES FOR EACH BASIN
   !!------------------------------------------------------------------------------
   
   CALL INFO(Trim(SolverName),'START BOXES', Level =5)
@@ -342,12 +344,17 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
     
      ! check if floating or melting (look at groundedmask)
      IF ( ANY( GM(GMPerm(NodeIndexes(:))) .GE. mskcrit ) ) CYCLE
-     b = NINT(Basin(BasinPerm(Indexx)))
 
+     IF (DIM .EQ. 3) THEN
+       b = NINT(MAXVAL(Basin(BasinPerm(NodeIndexes(1:n)))))
+     ELSE
+       b = NINT(Basin(BasinPerm(Indexx)))
+     ENDIF
+ 
      ! check maximal distance to GL at current element (for each basin)
      dmax = MAXVAL(distGL(distGLPerm(NodeIndexes(1:n))))
      IF (basinmax(b) < dmax ) THEN
-        basinmax(b)=dmax
+        basinmax(b) = dmax
      END IF
 
      !check maximal distance to GL for all the basins
@@ -356,7 +363,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
         distmax = dmax
      END IF
   END DO
-
+  
   IF (Parallel) THEN
     CALL MPI_ALLREDUCE(distmax,max_Reduced,1,MPI_DOUBLE_PRECISION,MPI_MAX,ELMER_COMM_WORLD,ierr)
     distmax= max_Reduced
@@ -368,11 +375,10 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   !compute the number of boxes per basin (Eq. (9) in Reese et al., 2018)
   boxes = 1+NINT(SQRT(basinmax/distmax)*(boxmax-1))
 
-  !write(*,*) b, boxmax, distmax
   CALL INFO(TRIM(SolverName),'BOXES DONE', Level =5)
 
   !!------------------------------------------------------------------------------
-  ! DEFINE BOXES FOR EACH BASIN
+  ! 3 - DEFINE AREA OF EACH BOX
   !!------------------------------------------------------------------------------
   !- Calculate total area of each box (Ak in Reese et al., 2018):
   ! second loop on elements
@@ -381,18 +387,29 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   DO e=1,Solver % NumberOfActiveElements
 
      Element => GetActiveElement(e)
-     CALL GetElementNodes( ElementNodes )
+     !CALL GetElementNodes( ElementNodes )
      n = GetElementNOFNodes()
      NodeIndexes => Element % NodeIndexes
      Indexx = Element % ElementIndex
 
      IF ( ANY( GM(GMPerm(NodeIndexes(:))) .GE. mskcrit ) ) CYCLE    ! leave the loop if grounded point in the element
-     b = NINT(Basin(BasinPerm(Indexx))) !basin to concider
-     nD=boxes(b)
-     !non dimensional relative distance to the GL (Eq. (10) in Reese et al., 2018)
-     rr(Indexx) = (SUM(distGL(distGLPerm(NodeIndexes(:))))/MAX(1,SIZE(distGL(distGLPerm(NodeIndexes(:))))))   &
-          &             / (SUM( distGL(distGLPerm(NodeIndexes(:)))) / MAX(1,SIZE(distGL(distGLPerm(NodeIndexes(:))))) &
+
+     IF (DIM .EQ. 3) THEN
+       b = NINT(MAXVAL(Basin(BasinPerm(NodeIndexes(1:n)))))
+       rr(NodeIndexes(:)) = &
+          & (SUM(distGL(distGLPerm(NodeIndexes(:)))) & / MAX(1,SIZE(distGL(distGLPerm(NodeIndexes(:)))))) &
+          & / (SUM(distGL(distGLPerm(NodeIndexes(:)))) & /  MAX(1,SIZE(distGL(distGLPerm(NodeIndexes(:))))) &
           & + SUM( distIF(distIFPerm(NodeIndexes(:)))) / MAX(1,SIZE(distGL(distGLPerm(NodeIndexes(:))))))
+     ELSE
+       b = NINT(Basin(BasinPerm(Indexx)))
+       !non dimensional relative distance to the GL (Eq. (10) in Reese et al., 2018)
+       rr(Indexx) = (SUM(distGL(distGLPerm(NodeIndexes(:))))/MAX(1,SIZE(distGL(distGLPerm(NodeIndexes(:))))))   & / (SUM( distGL(distGLPerm(NodeIndexes(:)))) / MAX(1,SIZE(distGL(distGLPerm(NodeIndexes(:))))) &
+           & + SUM( distIF(distIFPerm(NodeIndexes(:)))) / MAX(1,SIZE(distGL(distGLPerm(NodeIndexes(:))))))
+     ENDIF
+     
+     nD=boxes(b)
+      
+     
      IntegStuff = GaussPoints( Element )
      DO t=1,IntegStuff % n
         U = IntegStuff % u(t)
@@ -401,35 +418,54 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
         stat = ElementInfo(Element,ElementNodes,U,V,W,SqrtElementMetric, &
              Basis,dBasisdx )
         s = SqrtElementMetric * IntegStuff % s(t)
-        localunity(Indexx) = localunity(Indexx) + s * SUM(Basis(1:n)) ! surface of the element
-     END DO
-
-    ! check cond for box interation with grid cell coordinate (Eq. (11))
-     DO kk=1,nD
-        IF ( rr(Indexx) .GT. 1.0-SQRT(1.0*(nD-kk+1)/nD) .AND. rr(Indexx) .LE. 1.0-SQRT(1.0*(nD-kk)/nD) ) THEN
-           Abox(kk,b) = Abox(kk,b) + localunity(Indexx)  !air of box kk in basin b
-           Boxnumber(BPerm(Indexx))=kk
+       ! Surface of the element
+        IF (DIM.EQ. 3) THEN
+          localunity(NodeIndexes(1:n)) = localunity(NodeIndexes(1:n)) +  s * Basis(1:n)
+        ELSE
+          localunity(Indexx) = localunity(Indexx) + s * SUM(Basis(1:n))
         ENDIF
-     ENDDO
-  END DO  !end of loop on elements
-
-  ! cm: Here we do a loop over the number of basins. Works for (1,...,Nmax) but not for, e.g., (3,7,12)
-  DO b=1,MaxBas
-     nD=boxes(b)
-     DO kk=1,nD
-        IF (Parallel) THEN
-           CALL MPI_ALLREDUCE(Abox(kk,b),Area_Reduced,1,MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
-           Abox(kk,b) = Area_Reduced
-        END IF
-     ENDDO
-  END DO
+     END DO
   
+    ! check cond for box interation with grid cell coordinate (Eq. (11))
+    IF (DIM.EQ. 3) THEN
+      DO kk=1,nD
+        IF (MAXVAL(rr(NodeIndexes(1:n))) .GT. 1.0-SQRT(1.0*(nD-kk+1)/nD) .AND. MAXVAL(rr(NodeIndexes(1:n))) .LE. 1.0-SQRT(1.0*(nD-kk)/nD) ) THEN
+          Abox(kk,b) = Abox(kk,b) + SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))   !air of box kk in basin b
+          Boxnumber(BPerm(NodeIndexes(1:n))) = kk
+        ENDIF
+       ENDDO
+    ELSE
+      DO kk=1,nD
+        IF ( rr(Indexx) .GT. 1.0-SQRT(1.0*(nD-kk+1)/nD) .AND. rr(Indexx) .LE. 1.0-SQRT(1.0*(nD-kk)/nD) ) THEN
+          Abox(kk,b) = Abox(kk,b) + localunity(Indexx)  !air of box kk in basin b
+          Boxnumber(BPerm(Indexx)) = kk
+        ENDIF
+      ENDDO
+  END DO  !end of loop on elements
+  
+  ! cm: Here we do a loop over the number of basins. Works for (1,...,Nmax) but not for, e.g., (3,7,12)
+  IF (Parallel) THEN
+    !DO b=1,MaxBas
+      b = 14
+      nD=boxes(b)
+      DO kk=1,nD
+        write(*,*) kk,b, Abox(kk,b)
+        CALL MPI_ALLREDUCE(Abox(kk,b),Area_Reduced,1,MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
+        Abox(kk,b) = Area_Reduced
+      ENDDO
+    !END DO
+  END IF
 
-  !write(*,*) Abox(1,14)
+  
   CALL INFO(TRIM(SolverName),'Area Computation DONE', Level = 5)
-
+  CALL INFO(SolverName,"----------------------------------------",Level=1)
+  WRITE(meltValue,'(F20.2)') Integ_Reduced*0.917/1.0e9
+  Message='PICO INTEGRATED BASAL MELT [Gt/a]: '//meltValue ! 0.917/1.0e6 to convert m3/a in Gt/a
+  CALL INFO(SolverName,Message,Level=1)
+  CALL INFO(SolverName,"----------------------------------------",Level=1)
+  
   !!------------------------------------------------------------------------------
-  ! COMPUTE THE MELT IN BOXE 1 (based on input parameters and depth)
+  ! 4 - COMPUTE THE MELT IN BOXE 1 (based on input parameters and depth)
   !!------------------------------------------------------------------------------
   ! Compute Tbox, Sbox and qqq and melt for each element of the first box (B1)
   ! We solve for x = -g1.(Tstar + x - ay) and   (Eqs. A6 and A7)
@@ -443,8 +479,13 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
     Indexx = Element % ElementIndex
     !Only for first box
     IF (  Boxnumber(BPerm(Indexx))==1 ) THEN
-      b= NINT(Basin(BasinPerm(Indexx)))
-      zzz=SUM(Depth(DepthPerm(NodeIndexes(1:n))))/n !mean depth of an element
+      IF (DIM .EQ. 3) THEN
+        b = NINT(MAXVAL(Basin(BasinPerm(NodeIndexes(1:n)))))
+      ELSE
+        b = NINT(Basin(BasinPerm(Indexx)))
+      ENDIF
+    
+      zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/n !mean depth of an element
       Tstar = lbd1*S0(b) + lbd2 + lbd3*zzz - T0(b)  !NB: Tstar should be < 0
       g1 = gT * Abox(1,b)
       tmp1 = g1 / (CC*rhostar*(beta*S0(b)*meltfac-alpha))
@@ -457,11 +498,18 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
       ENDIF
       TT = T0(b) - xbox
       SS = S0(b) - xbox*S0(b)*meltfac
-      Tbox(1,b) = Tbox(1,b) + TT * localunity(Indexx)
-      Sbox(1,b) = Sbox(1,b) + SS * localunity(Indexx)
-      qqq(b) = qqq(b) + CC*rhostar*(beta*(S0(b)-SS)-alpha*(T0(b)-TT)) * localunity(Indexx)
-      Melt(MeltPerm(Indexx)) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )
-      totalmelt = totalmelt + Melt(MeltPerm(Indexx)) * localunity(Indexx)
+      IF (DIM .EQ. 3) THEN
+        Tbox(1,b) = Tbox(1,b) + TT *  SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
+        Sbox(1,b) = Sbox(1,b) + SS *  SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
+        qqq(b) = qqq(b) + CC*rhostar*(beta*(S0(b)-SS)-alpha*(T0(b)-TT)) *  SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:)) !flux (per basin)
+        Melt(MeltPerm(NodeIndexes(1:n))) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )
+        totalmelt=totalmelt+SUM(Melt(MeltPerm(NodeIndexes(1:n))))/SIZE(NodeIndexes(:)) * SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
+      ELSE
+        Tbox(1,b) = Tbox(1,b) + TT * localunity(Indexx)
+        Sbox(1,b) = Sbox(1,b) + SS * localunity(Indexx)
+        qqq(b) = qqq(b) + CC*rhostar*(beta*(S0(b)-SS)-alpha*(T0(b)-TT)) * localunity(Indexx)
+        Melt(MeltPerm(Indexx)) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )
+        totalmelt = totalmelt + Melt(MeltPerm(Indexx)) * localunity(Indexx)
     END IF
   END DO
    
@@ -498,18 +546,29 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
         Indexx = Element % ElementIndex
 
         IF (  Boxnumber(BPerm(Indexx))==kk ) THEN
-           b = NINT(Basin(BasinPerm(Indexx)))
-           zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/n !mean depth of an element
-           Tstar = lbd1*Sbox(kk-1,b) + lbd2 + lbd3*zzz - Tbox(kk-1,b)
-           g1  = gT * Abox(kk,b)
-           g2  = g1 * meltfac
-           xbox = - g1 * Tstar / ( qqq(b) + g1 - g2*lbd1*Sbox(kk-1,b) )
-           TT = Tbox(kk-1,b) - xbox
-           SS = Sbox(kk-1,b) - xbox*Sbox(kk-1,b)*meltfac
-           Tbox(kk,b) =  Tbox(kk,b) + TT * localunity(Indexx)
-           Sbox(kk,b) =  Sbox(kk,b) + SS * localunity(Indexx)
-           Melt(MeltPerm(Indexx)) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )
-           totalmelt = totalmelt+Melt(MeltPerm(Indexx)) * localunity(Indexx)
+          IF (DIM .EQ. 3) THEN
+            b = NINT(MAXVAL(Basin(BasinPerm(NodeIndexes(1:n)))))
+          ELSE
+            b = NINT(Basin(BasinPerm(Indexx)))
+          ENDIF
+          zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/n !mean depth of an element
+          Tstar = lbd1*Sbox(kk-1,b) + lbd2 + lbd3*zzz - Tbox(kk-1,b)
+          g1  = gT * Abox(kk,b)
+          g2  = g1 * meltfac
+          xbox = - g1 * Tstar / ( qqq(b) + g1 - g2*lbd1*Sbox(kk-1,b) )
+          TT = Tbox(kk-1,b) - xbox
+          SS = Sbox(kk-1,b) - xbox*Sbox(kk-1,b)*meltfac
+          IF (DIM .EQ. 3) THEN
+            Tbox(kk,b) =  Tbox(kk,b) + TT * SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
+            Sbox(kk,b) =  Sbox(kk,b) + SS * SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
+            Melt(MeltPerm(NodeIndexes(1:n))) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT)
+            totalmelt=totalmelt+SUM(Melt(MeltPerm(NodeIndexes(1:n))))/SIZE(NodeIndexes(:)) * SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
+          ELSE
+            Tbox(kk,b) =  Tbox(kk,b) + TT * localunity(Indexx)
+            Sbox(kk,b) =  Sbox(kk,b) + SS * localunity(Indexx)
+            Melt(MeltPerm(Indexx)) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )
+            totalmelt = totalmelt+Melt(MeltPerm(Indexx)) * localunity(Indexx)
+          ENDIF
         END IF
      END DO
 
