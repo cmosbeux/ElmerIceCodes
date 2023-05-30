@@ -33,9 +33,9 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   INTEGER :: n
 
   !! Mandatory variables and associated pointers
-  TYPE(Variable_t),POINTER :: BasinVar,BoxVar,MeltVar,GMVar,DepthVar,distGLVar,distIFVar
-  REAL(KIND=dp), POINTER ::  Basin(:),Boxnumber(:),Melt(:),GM(:),DepthVal(:),distGL(:),distIF(:)
-  INTEGER , POINTER :: BasinPerm(:),BPerm(:),MeltPerm(:),GMPerm(:),DepthPerm(:),distGLPerm(:),distIFPerm(:)
+  TYPE(Variable_t),POINTER :: BasinVar, BoxVar, MeltVar, GMVar, DepthVar, distGLVar, distIFVar
+  REAL(KIND=dp), POINTER ::  Basin(:), Boxnumber(:), Melt(:), GM(:), DepthVal(:), distGL(:), distIF(:)
+  INTEGER , POINTER :: BasinPerm(:), BPerm(:), MeltPerm(:), GMPerm(:), DepthPerm(:), distGLPerm(:), distIFPerm(:)
   REAL(kind=dp),ALLOCATABLE :: Depth(:)
 
   !! Variables related to netcd (containing input variables)
@@ -55,8 +55,8 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   LOGICAL :: llGL, PanAntarctic
 
   REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE, SAVE :: S_mean, T_mean
-  REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE,SAVE :: Zbox,Abox,Tbox,Sbox,Mbox
-  REAL(KIND=dp), DIMENSION(:), ALLOCATABLE,SAVE :: qqq,T0,S0,basin_Reduced,basinmax, delta_T
+  REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE,SAVE :: Zbox, Abox, Tbox, Sbox, Mbox
+  REAL(KIND=dp), DIMENSION(:), ALLOCATABLE,SAVE :: qqq, T0, S0, basin_Reduced, basinmax, delta_T
   INTEGER , DIMENSION(:), ALLOCATABLE,SAVE :: boxes
   REAL(KIND=dp), DIMENSION(:), ALLOCATABLE,SAVE :: localunity,rr
 
@@ -65,7 +65,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
        &                sn, max_Reduced, TT, SS, qqq_Reduced, totalmelt
   REAL(KIND=dp) :: distmax,dmax
 
-  INTEGER ::  e, t,kk, b
+  INTEGER ::  e, t, kk, b
   INTEGER :: nD
   INTEGER :: maxbastmp
   INTEGER :: ierr
