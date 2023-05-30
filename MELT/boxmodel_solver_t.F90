@@ -426,7 +426,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
      END DO
   
     ! check cond for box interation with grid cell coordinate (Eq. (11))
-    IF (DIM.EQ. 3) THEN
+    IF (DIM .EQ. 3) THEN
       DO kk=1,nD
         IF (MAXVAL(rr(NodeIndexes(1:n))) .GT. 1.0-SQRT(1.0*(nD-kk+1)/nD) .AND. MAXVAL(rr(NodeIndexes(1:n))) .LE. 1.0-SQRT(1.0*(nD-kk)/nD) ) THEN
           Abox(kk,b) = Abox(kk,b) + SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))   !air of box kk in basin b
@@ -475,7 +475,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
     IF (DIM .EQ. 3) THEN
       IF (MAXVAL(Boxnumber(BPerm(NodeIndexes(1:n))))==1 ) THEN
         b = NINT(MAXVAL(Basin(BasinPerm(NodeIndexes(1:n)))))
-        zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/n !mean depth of an element
+        zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/SIZE(NodeIndexes(:) !mean depth of an element
         Tstar = lbd1*S0(b) + lbd2 + lbd3*zzz - T0(b)  !NB: Tstar should be < 0
         g1 = gT * Abox(1,b)
         tmp1 = g1 / (CC*rhostar*(beta*S0(b)*meltfac-alpha))
