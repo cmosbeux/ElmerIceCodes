@@ -16,6 +16,8 @@ The MELT module provides functionality for parameterizing ocean-induced melt pro
 
 ## Contents
 
+[![Logo Fortran](https://example.com/fortran_logo.png)](https://example.com)
+
 - `DistanceModule.F90`: Module for computing distances to grounding lines and ice fronts.
 - `PICO.F90`: Implementation of the PICO parameterization for melt processes.
 - `Melt.F90`: Main subroutine for calling different melt parameterizations.
