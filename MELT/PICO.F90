@@ -487,14 +487,13 @@ MODULE PICO
     
     ! cm: Here we do a loop over the number of basins. Works for (1,...,Nmax) but not for, e.g., (3,7,12)
     IF (Parallel) THEN
-      !DO b=1,MaxBas
-        b = 14
+      DO b=1,MaxBas
         nD=boxes(b)
         DO kk=1,nD
           CALL MPI_ALLREDUCE(Abox(kk,b),Area_Reduced,1,MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
           Abox(kk,b) = Area_Reduced
         ENDDO
-      !END DO
+      END DO
     END IF
 
     
@@ -505,29 +504,29 @@ MODULE PICO
     !!------------------------------------------------------------------------------
     ! Compute Tbox, Sbox and qqq and melt for each element of the first box (B1)
     ! We solve for x = -g1.(Tstar + x - ay) and   (Eqs. A6 and A7)
-    ! third loop on elements
+    ! Third loop on elements
     CALL INFO(TRIM(SolverName),'STARTING Melt Boxe 1', Level = 5)
     Tbox(:,:)=0.d0 ; Sbox(:,:)=0.d0 ; qqq(:)=0.d0
     DO e=1,Solver % NumberOfActiveElements
       Element => GetActiveElement(e)
       n = GetElementNOFNodes()
       NodeIndexes => Element % NodeIndexes
-      Indexx = Element % ElementIndex
+      Indexx => Element % ElementIndex
       !Only for first box
       IF (DIM .EQ. 3) THEN
         IF (MAXVAL(Boxnumber(BPerm(NodeIndexes(1:n))))==1 ) THEN
           b = NINT(MAXVAL(Basin(BasinPerm(NodeIndexes(1:n)))))
-          zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/SIZE(NodeIndexes(:)) !mean depth of an element
-          Tstar = lbd1*S0(b) + lbd2 + lbd3*zzz - T0(b)  !NB: Tstar should be < 0
-          g1 = gT * Abox(1,b)
+          zzz = SUM(Depth(DepthPerm(NodeIndexes(:))))/SIZE(NodeIndexes(:)) !mean depth of an element
+          Tstar = lbd1*S0(b) + lbd2 + lbd3*zzz - T0(b)  !NB: Tstar should be < 0 (Temperature at the ice-ocean interface; Eq. (5))
+          g1 = gT * Abox(1,b) !exchange velocity
           tmp1 = g1 / (CC*rhostar*(beta*S0(b)*meltfac-alpha))
           sn = (0.5*tmp1)**2 - tmp1*Tstar
           ! to avoid negative discriminent (no solution for x otherwise) :
           IF( sn .lt. 0.d0 ) THEN
             xbox = 0.d0
-          ElSE
+          ELSE
             xbox = - 0.5*tmp1 + SQRT(sn) ! standard solution (Reese et al)
-          ENDIF
+          END IF
           TT = T0(b) - xbox
           SS = S0(b) - xbox*S0(b)*meltfac
           Tbox(1,b) = Tbox(1,b) + TT *  SUM(localunity(NodeIndexes(1:n))) / SIZE(NodeIndexes(:))
@@ -598,7 +597,7 @@ MODULE PICO
           IF (DIM .EQ. 3) THEN
             IF (MAXVAL(Boxnumber(BPerm(NodeIndexes(1:n))))==1 ) THEN
               b = NINT(MAXVAL(Basin(BasinPerm(NodeIndexes(1:n)))))
-              zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/n !mean depth of an element
+              zzz = SUM(Depth(DepthPerm(NodeIndexes(:))))/SIZE(NodeIndexes(:)) !mean depth of an element
               Tstar = lbd1*Sbox(kk-1,b) + lbd2 + lbd3*zzz - Tbox(kk-1,b)
               g1  = gT * Abox(kk,b)
               g2  = g1 * meltfac

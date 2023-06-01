@@ -375,7 +375,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
 ! 4- Start First Box Melt Computation
 !------------------------------------------------------------------------------
   ! Compute Tbox, Sbox and qqq and melt for each element of the first box (B1)
-  ! Third loop on element
+  ! Third loop on elements
   ! We solve for x = -g1.(Tstar + x - ay) and   (Eqs. A6 and A7)
   CALL INFO(TRIM(SolverName),'START First Box', Level =5)
   Tbox(:,:)=0.d0 ; Sbox(:,:)=0.d0 ; qqq(:)=0.d0
@@ -391,21 +391,21 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
      IF (MAXVAL(Boxnumber(BPerm(NodeIndexes(1:n))))==1 ) THEN
         b = NINT(MAXVAL(Basin(BasinPerm(NodeIndexes(1:n)))))
         zzz = SUM(Depth(DepthPerm(NodeIndexes(:))))/SIZE(NodeIndexes(:)) !mean depth of an element
-        Tstar = lbd1*S0(b) + lbd2 + lbd3*zzz - T0(b)  !NB: Tstar should be < 0  (Temperature at the ice-ocean interface; Eq. (5))
-        g1 = gT * Abox(1,b)   !exchange velocity
+        Tstar = lbd1*S0(b) + lbd2 + lbd3*zzz - T0(b)  !NB: Tstar should be < 0 (Temperature at the ice-ocean interface; Eq. (5))
+        g1 = gT * Abox(1,b) !exchange velocity
         tmp1 = g1 / (CC*rhostar*(beta*S0(b)*meltfac-alpha))
         sn = (0.5*tmp1)**2 - tmp1*Tstar
         ! to avoid negative discriminent (no solution for x otherwise) :
         IF( sn .lt. 0.d0 ) THEN
            xbox = 0.d0
-        else
+        ELSE
            xbox = - 0.5*tmp1 + SQRT(sn) ! standard solution (Reese et al)
-        ENDif
+        END IF
         TT = T0(b) - xbox
         SS = S0(b) - xbox*S0(b)*meltfac
-        Tbox(1,b) = Tbox(1,b) + TT *  SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
-        Sbox(1,b) = Sbox(1,b) + SS *  SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
-        qqq(b) = qqq(b) + CC*rhostar*(beta*(S0(b)-SS)-alpha*(T0(b)-TT)) *  SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:)) !flux (per basin)
+        Tbox(1,b) = Tbox(1,b) + TT *  SUM(localunity(NodeIndexes(1:n))) / SIZE(NodeIndexes(:))
+        Sbox(1,b) = Sbox(1,b) + SS *  SUM(localunity(NodeIndexes(1:n))) / SIZE(NodeIndexes(:))
+        qqq(b) = qqq(b) + CC*rhostar*(beta*(S0(b)-SS)-alpha*(T0(b)-TT)) * SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:)) !flux (per basin)
         Melt(MeltPerm(NodeIndexes(1:n))) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )
         totalmelt=totalmelt+SUM(Melt(MeltPerm(NodeIndexes(1:n))))/SIZE(NodeIndexes(:)) * SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
      END IF
