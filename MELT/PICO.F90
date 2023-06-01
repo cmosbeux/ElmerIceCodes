@@ -520,6 +520,7 @@ MODULE PICO
           zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/SIZE(NodeIndexes(:)) !mean depth of an element
           Tstar = lbd1*S0(b) + lbd2 + lbd3*zzz - T0(b)  !NB: Tstar should be < 0
           g1 = gT * Abox(1,b)
+          write(*,*) Abox(1,b)
           tmp1 = g1 / (CC*rhostar*(beta*S0(b)*meltfac-alpha))
           sn = (0.5*tmp1)**2 - tmp1*Tstar
           ! to avoid negative discriminent (no solution for x otherwise) :
@@ -530,9 +531,9 @@ MODULE PICO
           ENDIF
           TT = T0(b) - xbox
           SS = S0(b) - xbox*S0(b)*meltfac
-          Tbox(1,b) = Tbox(1,b) + TT *  SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
-          Sbox(1,b) = Sbox(1,b) + SS *  SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:))
-          qqq(b) = qqq(b) + CC*rhostar*(beta*(S0(b)-SS)-alpha*(T0(b)-TT)) *  SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:)) !flux (per basin)
+          Tbox(1,b) = Tbox(1,b) + TT *  SUM(localunity(NodeIndexes(1:n))) / SIZE(NodeIndexes(:))
+          Sbox(1,b) = Sbox(1,b) + SS *  SUM(localunity(NodeIndexes(1:n))) / SIZE(NodeIndexes(:))
+          qqq(b) = qqq(b) + CC*rhostar*(beta*(S0(b)-SS)-alpha*(T0(b)-TT)) * SUM(localunity(NodeIndexes(1:n)))/SIZE(NodeIndexes(:)) !flux (per basin)
           Melt(MeltPerm(NodeIndexes(1:n))) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )
           totalmelt = totalmelt &
             & + SUM(Melt(MeltPerm(NodeIndexes(1:n))))/SIZE(NodeIndexes(:)) &
