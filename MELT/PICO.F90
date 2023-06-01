@@ -520,7 +520,6 @@ MODULE PICO
           zzz = SUM(Depth(DepthPerm(NodeIndexes(1:n))))/SIZE(NodeIndexes(:)) !mean depth of an element
           Tstar = lbd1*S0(b) + lbd2 + lbd3*zzz - T0(b)  !NB: Tstar should be < 0
           g1 = gT * Abox(1,b)
-          write(*,*) Abox(1,b)
           tmp1 = g1 / (CC*rhostar*(beta*S0(b)*meltfac-alpha))
           sn = (0.5*tmp1)**2 - tmp1*Tstar
           ! to avoid negative discriminent (no solution for x otherwise) :
