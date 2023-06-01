@@ -6,9 +6,13 @@ Cyrille Mosbeubx, Benoit Urruty, Justile Caillet, Fabien Gillet-Chaulet
 
 ## Intro 
 
-This repository contains the MELT module for the Elmer/Ice software, which is a finite element software for modeling multiphysical problems related to ice and snow.
+This repository contains the MELT module for the Elmer/Ice software, which is a finite element software for modeling multiphysical problems related to ice.
 
-The MELT module provides functionality for parameterizing melt processes in ice and snow. It includes various parameterization options and solvers for computing distances to grounding lines and ice fronts.
+The MELT module provides functionality for parameterizing ocean-induced melt processes. It includes various parameterization options. THe following parameterizations are implemented:
+
+- [x] PICO
+- [ ] Linear
+- [ ] Quadratic 
 
 ## Contents
 
