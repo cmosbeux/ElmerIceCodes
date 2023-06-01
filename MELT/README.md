@@ -1,8 +1,10 @@
 # ElmerIceCodes - MELT
 
-## Authors
+### Authors
 
 Cyrille Mosbeubx, Benoit Urruty, Justile Caillet, Fabien Gillet-Chaulet
+
+## Intro 
 
 This repository contains the MELT module for the Elmer/Ice software, which is a finite element software for modeling multiphysical problems related to ice and snow.
 
