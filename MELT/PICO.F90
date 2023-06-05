@@ -379,7 +379,7 @@ MODULE PICO
     !compute the number of boxes per basin (Eq. (9) in Reese et al., 2018)
     boxes = 1+NINT(SQRT(basinmax/distmax)*(boxmax-1))
 
-    CALL INFO(TRIM(SolverName),'BOXES DONE', Level =5)
+    CALL INFO(TRIM(SolverName),'BOXES DONE', Level = 5)
 
     !!------------------------------------------------------------------------------
     ! 3 - DEFINE AREA OF EACH BOX
