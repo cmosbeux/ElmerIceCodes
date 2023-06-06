@@ -15,10 +15,12 @@ The MELT module provides functionality for parameterizing ocean-induced melt pro
 - [ ] Quadratic 
 
 ## Contents
-
-- `DistanceModule.F90`: Module for computing distances to grounding lines and ice fronts.
-- `PICO.F90`: Implementation of the PICO parameterization for melt processes.
 - `Melt.F90`: Main subroutine for calling different melt parameterizations.
+
+- `PICO.F90`: Implementation of the PICO parameterization for melt processes. This module relies on the other module:
+  - `DistanceModule.F90`: Module for computing distances to grounding lines and ice fronts.
+
+
 - Other supporting files and modules.
 
 ## Usage
