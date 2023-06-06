@@ -579,7 +579,7 @@ MODULE PICO
         Sbox(kk,b) =  Sbox(kk,b) + SS * surf
 
         IF (DIM .EQ. 3) THEN
-          Melt(MeltPerm(NodeIndexes(1:n))) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT ) 
+          Melt(MeltPerm(NodeIndexes(1:n))) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )  
           totalmelt = totalmelt &
             & + SUM(Melt(MeltPerm(NodeIndexes(1:n))))/n &
             & * SUM(localunity(NodeIndexes(1:n)))/n
