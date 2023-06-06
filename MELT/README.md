@@ -10,7 +10,7 @@ This repository contains the MELT module for the Elmer/Ice software, which is a 
 
 The MELT module provides functionality for parameterizing ocean-induced melt processes. It includes various parameterization options. THe following parameterizations are implemented:
 
-- [x] <span style="color:green">v</span> PICO
+- [x] PICO
   - [ ] we should avoid calling the `USF_CondDistance.F90` in the BodyForce. The USFs should ve coded in the `DistanceModule.F90`
 - [ ] Linear
 - [ ] Quadratic 
