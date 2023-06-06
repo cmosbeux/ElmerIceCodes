@@ -307,7 +307,7 @@ SUBROUTINE boxmodel_solver( Model,Solver,dt,Transient )
   END DO
   !compute the number of boxes per basin (Eq. (9) in Reese et al., 2018)
   boxes = 2 !1+NINT(SQRT(basinmax/distmax)*(boxmax-1))
-  CALL INFO(TRIM(SolverName),'Boxes DONE', Level =5)
+  CALL INFO(TRIM(SolverName),'Boxes DONE', Level = 5)
 
 !------------------------------------------------------------------------------
 ! 3- Start Area Computation
