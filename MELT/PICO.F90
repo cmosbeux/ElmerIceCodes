@@ -462,7 +462,6 @@ MODULE PICO
         ENDDO
       END DO
     END IF
-
     
     CALL INFO(TRIM(SolverName),'Area Computation DONE', Level = 5)
     
