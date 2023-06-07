@@ -153,8 +153,7 @@ SUBROUTINE NodalNudging( Model,Solver,dt,TransientSimulation )
         WRITE(Message,'(A,A,A)') 'No nudged variable >',NudgedVarName,' < found'
         CALL FATAL(SolverName,Message)
   END IF
-  
-  print*, 'tip' 
+
   ! Take information about the top surface 
   TopSurfName = GetString( SolverParams,'Top Surface Name', Found)
   If(.NOT.Found) THEN
@@ -187,7 +186,6 @@ SUBROUTINE NodalNudging( Model,Solver,dt,TransientSimulation )
         END IF
   END IF
 
-  print*, 'top'
   !Variable giving the observation Density
   ObsDensityName = GetString( SolverParams,'Observation Density Variable Name', Found)
   If(.NOT.Found) THEN
@@ -203,8 +201,7 @@ SUBROUTINE NodalNudging( Model,Solver,dt,TransientSimulation )
                 CALL FATAL(SolverName,Message)
        END IF
   END IF
-
-  print*, 'test0'
+  
   CALL StartAdvanceOutput(SolverName,'Nodal Nudging')
 
   VariableValues(:) = 0.0_dp
@@ -275,7 +272,6 @@ SUBROUTINE NodalNudging( Model,Solver,dt,TransientSimulation )
   END DO
   FirstRound=.False.
 
-  print*, 'test1'
   !Get Info about minimum ice thickness
   !Material => GetMaterial()
   !LowerLimit=0.0_dp
@@ -287,8 +283,7 @@ SUBROUTINE NodalNudging( Model,Solver,dt,TransientSimulation )
   LowerLimit = GetConstReal(Material, 'Minimum Ice Thickness', FoundLowerLimit)
            IF (.Not.FoundLowerLimit)  &
               CALL FATAL( SolverName, '> Minimum Ice Thickness < not given in Material' )
-
-  print*, 'test2' 
+ 
   !Allocation of Callback value for each node
   DO t=1,Solver % Mesh % NumberOfNodes
         IF (Density(DensityPerm(t)) == 0) THEN
