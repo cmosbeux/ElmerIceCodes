@@ -81,7 +81,7 @@ MODULE PICO
     INTEGER :: NetcdfStatus,varid,ncid
     CHARACTER(LEN=MAX_NAME_LEN) :: DataFT, DataFS
     INTEGER :: tmeanid, nlen
-    INTEGER,SAVE :: nTime, DIM
+    INTEGER,SAVE :: nTime
     INTEGER :: nTime2
 
     INTEGER,SAVE :: VisitedTimes=0
@@ -91,7 +91,7 @@ MODULE PICO
     !! Physical Parameters
     REAL(KIND=dp), SAVE :: sealevel, lbd1, lbd2, lbd3, meltfac, K, gT,  rhostar, CC,beta, alpha, mskcrit
     INTEGER, SAVE :: boxmax,MaxBas
-    LOGICAL :: llGL, PanAntarctic
+    LOGICAL :: llGL, PanAntarctic, MeltNodal
 
     REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE, SAVE :: S_mean, T_mean
     REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE,SAVE :: Zbox, Abox, Tbox, Sbox
@@ -131,8 +131,6 @@ MODULE PICO
     ! Get mandatory variables
     !------------------------------------------------------------------------------
 
-    DIM = CoordinateSystemDimension()
-
     BasinVar => VariableGet(Model % Mesh % Variables, 'Basins', UnFoundFatal=.TRUE.)
     BasinPerm => BasinVar % Perm
     Basin => BasinVar % Values
@@ -146,14 +144,17 @@ MODULE PICO
     Melt => MeltVar % Values
 
     ! cm: for now, the 3d version works only with nodal variable, this should be fixed/cleaned in the future
-    IF (DIM == 3) THEN
+    MeltNodal = ListGetLogical( Params,'Nodal Melt',Found) 
+    IF (MeltNodal) THEN
       IF (BasinVar % TYPE == Variable_on_elements .OR. BoxVar % TYPE == Variable_on_elements &
         & .OR. MeltVar % TYPE == Variable_on_elements) THEN
-          CALL FATAL(SolverName, 'Elemental variables on boundary do not work in 3D')
+        CALL FATAL(SolverName, 'Basins, Boxes, or Melt is not a variable on nodes')
       END IF
-    ELSE IF (BasinVar % TYPE /= Variable_on_elements .OR. BoxVar % TYPE /= Variable_on_elements &
-      & .OR. MeltVar % TYPE /= Variable_on_elements) THEN
+    ELSE
+      IF (BasinVar % TYPE /= Variable_on_elements .OR. BoxVar % TYPE /= Variable_on_elements &
+        & .OR. MeltVar % TYPE /= Variable_on_elements) THEN
         CALL FATAL(SolverName, 'Basins, Boxes, or Melt is not a variable on elements')
+      END IF
     END IF
 
     GMVar => VariableGet( Model % Mesh % Variables, 'GroundedMask',UnFoundFatal=.TRUE.)
@@ -235,6 +236,7 @@ MODULE PICO
       !!------------------------------------------------------------------------------     
 
       DataFT = ListGetString( Params, 'data file', Found, UnFoundFatal )
+
       NetCDFstatus = NF90_OPEN( Trim(DataFT), NF90_NOWRITE, ncid )
       NetCDFstatus = nf90_inq_dimid( ncid, 'number_of_basins' , tmeanid)
       IF (NetCDFstatus /= NF90_NOERR ) THEN
@@ -261,7 +263,17 @@ MODULE PICO
       ALLOCATE( T_mean(nlen,nTime) )
       ALLOCATE( S_mean(nlen,nTime) )
       ALLOCATE( delta_T(nlen) ) 
-      
+
+      !initialize delta T to zero to make sure it does not come at a weird value when not in the netcdf
+      delta_T(:) = 0.0_dp  
+      NetCDFstatus = nf90_inq_varid( ncid, 'delta_T', varid)
+      IF ( NetCDFstatus.EQ.NF90_NOERR ) THEN
+          NetCDFstatus = nf90_get_var( ncid, varid, delta_T )
+      ELSE
+          CALL INFO(Trim(SolverName), 'Unable to get netcdf variable delta_T. Set to 0.0', Level = 3)
+          delta_T(:) = 0.0_dp   
+      END IF
+
       NetCDFstatus = nf90_inq_varid( ncid, 'T_mean', varid)
       NetCDFstatus = nf90_get_var( ncid, varid, T_mean )
       IF ( NetCDFstatus /= NF90_NOERR ) THEN
@@ -274,13 +286,6 @@ MODULE PICO
       IF ( NetCDFstatus /= NF90_NOERR ) THEN
           CALL Fatal(Trim(SolverName), &
               'Unable to get netcdf variable S_mean')
-      END IF
-      
-      NetCDFstatus = nf90_inq_varid( ncid, 'delta_T', varid)
-      NetCDFstatus = nf90_get_var( ncid, varid, delta_T )
-      IF ( NetCDFstatus /= NF90_NOERR ) THEN
-          CALL INFO(Trim(SolverName), 'Unable to get netcdf variable delta_T. Set to 0.0', Level = 3)
-          delta_T = 0.0_dp   
       END IF
 
       ! close file
@@ -350,7 +355,7 @@ MODULE PICO
       ! check if floating or melting (look at groundedmask)
       IF ( ANY( GM(GMPerm(NodeIndexes(:))) .GE. mskcrit ) ) CYCLE
 
-      IF (DIM .EQ. 3) THEN
+      IF (MeltNodal) THEN
         b = NINT(MAXVAL(Basin(BasinPerm(NodeIndexes(1:n)))))
       ELSE
         b = NINT(Basin(BasinPerm(Indexx)))
@@ -399,7 +404,7 @@ MODULE PICO
 
       IF ( ANY( GM(GMPerm(NodeIndexes(:))) .GE. mskcrit ) ) CYCLE    ! leave the loop if grounded point in the element
 
-      IF (DIM .EQ. 3) THEN
+      IF (MeltNodal) THEN
         b = NINT(MAXVAL(Basin(BasinPerm(NodeIndexes(1:n)))))
         rr(NodeIndexes(:)) = (SUM(distGL(distGLPerm(NodeIndexes(:)))) /MAX(1,SIZE(distGL(distGLPerm(NodeIndexes(:))))))   &
         &      / (SUM(distGL(distGLPerm(NodeIndexes(:)))) / MAX(1,SIZE(distGL(distGLPerm(NodeIndexes(:))))) &
@@ -423,7 +428,7 @@ MODULE PICO
               Basis,dBasisdx )
           s = SqrtElementMetric * IntegStuff % s(t)
         ! Surface of the element
-          IF (DIM.EQ. 3) THEN
+          IF (MeltNodal) THEN
             localunity(NodeIndexes(1:n)) = localunity(NodeIndexes(1:n)) +  s * Basis(1:n)
           ELSE
             localunity(Indexx) = localunity(Indexx) + s * SUM(Basis(1:n))
@@ -431,7 +436,7 @@ MODULE PICO
       END DO
     
       ! check cond for box interation with grid cell coordinate (Eq. (11))
-      IF (DIM .EQ. 3) THEN
+      IF (MeltNodal) THEN
         DO kk=1,nD
           IF (MAXVAL(rr(NodeIndexes(1:n))) .GT. (1.0 - SQRT(1.0*(nD-kk+1)/nD)) &
             & .AND. MAXVAL(rr(NodeIndexes(1:n))) .LE. (1.0 - SQRT(1.0*(nD-kk)/nD))) THEN
@@ -457,7 +462,7 @@ MODULE PICO
         DO kk=1,nD
           CALL MPI_ALLREDUCE(Abox(kk,b),Area_Reduced,1,MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
           Abox(kk,b) = Area_Reduced
-          WRITE(message, '(A,I0,A,I0,A,F6.1,A)') 'Area(', kk, ',', b, ') = ', Abox(kk, b)/1e6 , ' km2'
+          WRITE(message, '(A,I0,A,I0,A,F7.1,A)') 'Area(', kk, ',', b, ') = ', Abox(kk, b)/1e6 , ' km2'
           CALL INFO(TRIM(SolverName), message, Level = 5)
         ENDDO
       END DO
@@ -481,10 +486,10 @@ MODULE PICO
       Indexx => Element % ElementIndex
 
       !Check that we are we work in 2D or 3D
-      IF (DIM .EQ. 3 .AND. MAXVAL(Boxnumber(BPerm(NodeIndexes(1:n))))==1 ) THEN
+      IF (MeltNodal .AND. MAXVAL(Boxnumber(BPerm(NodeIndexes(1:n))))==1 ) THEN
         b = NINT(MAXVAL(Basin(BasinPerm(NodeIndexes(1:n)))))
         surf = SUM(localunity(NodeIndexes(1:n)))/n 
-      ELSEIF (DIM .NE. 3 .AND. Boxnumber(BPerm(Indexx))==1 ) THEN
+      ELSEIF (.NOT. MeltNodal .AND. Boxnumber(BPerm(Indexx))==1 ) THEN
         b = NINT(Basin(BasinPerm(Indexx)))
         surf = localunity(Indexx)
       ELSE
@@ -508,7 +513,7 @@ MODULE PICO
       Sbox(1,b) = Sbox(1,b) + SS *  surf
       qqq(b) = qqq(b) + CC*rhostar*(beta*(S0(b)-SS)-alpha*(T0(b)-TT)) * surf !flux (per basin)
 
-      IF (DIM .EQ. 3) THEN
+      IF (MeltNodal) THEN
         Melt(MeltPerm(NodeIndexes(1:n))) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT ) 
         totalmelt = totalmelt &
           & + SUM(Melt(MeltPerm(NodeIndexes(1:n))))/n &
@@ -518,8 +523,6 @@ MODULE PICO
         totalmelt = totalmelt + Melt(MeltPerm(Indexx)) * localunity(Indexx)
       ENDIF 
     END DO
-
-    write(*,*) 'TT-SS(1):',TT, SS
     
     DO b=1,MaxBas
       nD=boxes(b)
@@ -536,9 +539,6 @@ MODULE PICO
     Tbox(1,1:MaxBas) = Tbox(1,1:MaxBas) / Abox(1,1:MaxBas)
     Sbox(1,1:MaxBas) = Sbox(1,1:MaxBas) / Abox(1,1:MaxBas)
     qqq(1:MaxBas) = qqq(1:MaxBas) / Abox(1,1:MaxBas)
-
-    !write(*,*) 'T(1):', Tbox(1,14)
-    !write(*,*) 'S(1):', Sbox(1,14)
 
     CALL INFO(TRIM(SolverName),'Melt Boxe 1 DONE', Level = 5)
 
@@ -557,10 +557,10 @@ MODULE PICO
         Indexx => Element % ElementIndex
 
         !Check that we are we work in 2D or 3D
-        IF (DIM .EQ. 3 .AND. MAXVAL(Boxnumber(BPerm(NodeIndexes(1:n))))==kk ) THEN
+        IF (MeltNodal .AND. MAXVAL(Boxnumber(BPerm(NodeIndexes(1:n))))==kk ) THEN
           b = NINT(MAXVAL(Basin(BasinPerm(NodeIndexes(1:n)))))
           surf = SUM(localunity(NodeIndexes(1:n)))/n 
-        ELSEIF (DIM .NE. 3 .AND. Boxnumber(BPerm(Indexx))==kk ) THEN
+        ELSEIF (.NOT. MeltNodal .AND. Boxnumber(BPerm(Indexx))==kk ) THEN
           b = NINT(Basin(BasinPerm(Indexx)))
           surf = localunity(Indexx)
         ELSE
@@ -577,7 +577,7 @@ MODULE PICO
         Tbox(kk,b) =  Tbox(kk,b) + TT * surf
         Sbox(kk,b) =  Sbox(kk,b) + SS * surf
 
-        IF (DIM .EQ. 3) THEN
+        IF (MeltNodal) THEN
           Melt(MeltPerm(NodeIndexes(1:n))) = - gT * meltfac * ( lbd1*SS + lbd2 + lbd3*zzz - TT )  
           totalmelt = totalmelt &
             & + SUM(Melt(MeltPerm(NodeIndexes(1:n))))/n &
@@ -589,7 +589,6 @@ MODULE PICO
        
       END DO
 
-      write(*,*) 'TT-SS', kk, TT, SS 
       DO b=1,MaxBas
           nD=boxes(b)
           IF (Parallel) THEN
@@ -604,15 +603,6 @@ MODULE PICO
       Sbox(kk,1:MaxBas) = Sbox(kk,1:MaxBas) / Abox(kk,1:MaxBas)
 
     END DO
-
-    !write(*,*) 'T(2):', Tbox(2,14)
-    !write(*,*) 'S(2):', Sbox(2,14)
-    !write(*,*) 'T(3):', Tbox(3,14)
-    !write(*,*) 'S(3):', Sbox(3,14)
-    !write(*,*) 'T(4):', Tbox(4,14)
-    !write(*,*) 'S(4):', Sbox(4,14)
-    !write(*,*) 'T(5):', Tbox(5,14)
-    !write(*,*) 'S(5):', Sbox(5,14)
 
     IF (Parallel) THEN
       CALL MPI_ALLREDUCE(TotalMelt,Integ_Reduced,1,MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
@@ -630,7 +620,7 @@ MODULE PICO
 
     DEALLOCATE(Zbox, Abox, Tbox, Sbox, T0, S0, rr, localunity)
     DEALLOCATE(basin_Reduced,basinmax,boxes)
-    DEALLOCATE(Basis, dBasisdx)
+    DEALLOCATE(Basis, dBasisdx) 
 
     ! reverse signe for Elmer (loss of mass (ie melt) is negative)
     Melt = -Melt
