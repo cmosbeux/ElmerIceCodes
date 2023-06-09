@@ -26,7 +26,7 @@ The MELT module provides functionality for parameterizing ocean-induced melt pro
 
 1. Compile the code with the given Makefile that runs the following command: `elmerf90 DistanceModule.F90 PICO.F90 Melt.F90 -o Melt $(LFLAGS) $(IFLAGS)`. The flags should be adpated to your machine.
 
-2. The solver Melt should be called in you `.sif`. For PICO, we can give:
+2. The solver Melt should be called in you `.sif` and applied on a 2D body (the basal boundary in 3D or the bulk in 2D). For PICO, we can give:
 
 ```f90
 Solver 5
@@ -47,8 +47,15 @@ Solver 5
   Exported variable 1 = -dofs 1 distGL
   Exported variable 2 = -dofs 1 FrontMask
   Exported variable 3 = -dofs 1 distIF
-  Exported Variable 4 = -dofs 1 Boxes
-  Exported Variable 5 = -dofs 1 Melt
+  Exported Variable 4 = -dofs 1 -elem Boxes
+  Exported Variable 5 = -dofs 1 -elem Melt
+End
+```
+The solver works both elmentaly and nodaly. Nodal variables can be forced with `Nodal Melt = Logical False`
+
+```f90
+  Exported Variable 4 = -dofs 1 -elem Boxes
+  Exported Variable 5 = -dofs 1 -elem Melt
 End
 ```
 
@@ -89,4 +96,4 @@ This code is licensed under the GNU General Public License, version 2 or later. 
 
 For any inquiries or questions, please contact:
 - Author: Cyrille Mosbeux
-- Email: cmosbeux@univ-grenoble-alpes.fr
+- Email: cyrille.mosbeux@univ-grenoble-alpes.fr
