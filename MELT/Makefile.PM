@@ -11,7 +11,7 @@ VPATH=$(BLD)
 
 FFLAGS=-I$(XIOS_INC) -O2 -fpe0 -ftrapuv -g -traceback
 
-LIBS= USF_ExitCondition boxmodel_solver_t FrontThickness_mask USF_CondFront USF_CondDistance SlipCoef nearestpoint GetConnectedAreas passive_cond ExcludeAreas
+LIBS= USF_ExitCondition boxmodel_solver_t FrontThickness_mask USF_CondFront USF_CondDistance SlipCoef nearestpoint GetConnectedAreas passive_cond ExcludeAreas UGridDataReader
 
 all: $(LIBS)
 
@@ -19,6 +19,9 @@ all: $(LIBS)
 # USR function
 USF_ExitCondition:${SRC}/USF_ExitCondition.F90
 	elmerf90 $^ -o $(BLD)/$@ $(FFLAGS)
+
+UGridDataReader:$(SRC)/UGridDataReader.F90
+	elmerf90 $(NCINC) $^ -o $(BLD)/$@ $(FFLAGS) $(NCLIB)
 
 #---------------------------------------------------
 # Post Porcessing
