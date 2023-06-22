@@ -121,10 +121,7 @@ MODULE PICO
     !------------------------------------------------------------------------------
     Params => GetSolverParams()
 
-    Mesh => Model % Mesh
-
-    Nmax = Solver % Mesh % NumberOfNodes
-    
+    Mesh => Model % Mesh  
     
     
     !------------------------------------------------------------------------------
@@ -146,11 +143,13 @@ MODULE PICO
     ! cm: for now, the 3d version works only with nodal variable, this should be fixed/cleaned in the future
     MeltNodal = ListGetLogical( Params,'Nodal Melt',Found) 
     IF (MeltNodal) THEN
+      Nmax = Solver % Mesh % NumberOfNodes
       IF (BasinVar % TYPE == Variable_on_elements .OR. BoxVar % TYPE == Variable_on_elements &
         & .OR. MeltVar % TYPE == Variable_on_elements) THEN
         CALL FATAL(SolverName, 'Basins, Boxes, or Melt is not a variable on nodes')
       END IF
     ELSE
+      Nmax = Solver % NumberOfActiveElements
       IF (BasinVar % TYPE /= Variable_on_elements .OR. BoxVar % TYPE /= Variable_on_elements &
         & .OR. MeltVar % TYPE /= Variable_on_elements) THEN
         CALL FATAL(SolverName, 'Basins, Boxes, or Melt is not a variable on elements')
@@ -248,8 +247,10 @@ MODULE PICO
     
       IF (nlen.NE.MaxBas .AND. PanAntarctic) THEN
         CALL Fatal(Trim(SolverName),"Number of basins do not agree")
+      ELSE IF (nlen.EQ.MaxBas .AND. PanAntarctic) THEN
+        CALL INFO(Trim(SolverName), 'PanAntarctic Simulation', Level = 5)
       ELSE
-        CALL INFO(Trim(SolverName),'Regional simulation', Level = 5)
+        CALL INFO(Trim(SolverName), 'Regional Simulation', Level = 5)
       ENDIF
 
       !!! check if we have a time dimension
@@ -618,9 +619,9 @@ MODULE PICO
     CALL INFO(SolverName,Message,Level=1)
     CALL INFO(SolverName,"----------------------------------------", Level=1)
 
-    DEALLOCATE(Zbox, Abox, Tbox, Sbox, T0, S0, rr, localunity)
-    DEALLOCATE(basin_Reduced,basinmax,boxes)
-    DEALLOCATE(Basis, dBasisdx) 
+    !DEALLOCATE(Zbox, Abox, Tbox, Sbox, T0, S0, rr, localunity)
+    !DEALLOCATE(basin_Reduced,basinmax,boxes)
+    !DEALLOCATE(Basis, dBasisdx) 
 
     ! reverse signe for Elmer (loss of mass (ie melt) is negative)
     Melt = -Melt
