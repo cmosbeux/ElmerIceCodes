@@ -67,7 +67,7 @@ MODULE PICO
     TYPE(GaussIntegrationPoints_t) :: IntegStuff
     REAL(kind=dp) :: u, v, w, SqrtElementMetric, s, surf
     REAL(kind=dp),ALLOCATABLE,SAVE :: Basis(:), dBasisdx(:,:)
-    INTEGER, POINTER :: NodeIndexes(:), Indexx
+    INTEGER, POINTER :: NodeIndexes(:)
     INTEGER :: Nmax
     INTEGER :: n
 
@@ -94,10 +94,10 @@ MODULE PICO
     LOGICAL :: llGL, PanAntarctic, MeltNodal
 
     REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE, SAVE :: S_mean, T_mean
-    REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE,SAVE :: Zbox, Abox, Tbox, Sbox
-    REAL(KIND=dp), DIMENSION(:), ALLOCATABLE,SAVE :: qqq, T0, S0, basin_Reduced, basinmax, delta_T
-    INTEGER , DIMENSION(:), ALLOCATABLE,SAVE :: boxes
-    REAL(KIND=dp), DIMENSION(:), ALLOCATABLE,SAVE :: localunity,rr
+    REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE, SAVE :: Zbox, Abox, Tbox, Sbox
+    REAL(KIND=dp), DIMENSION(:), ALLOCATABLE, SAVE :: qqq, T0, S0, basin_Reduced, basinmax, delta_T
+    INTEGER, DIMENSION(:), ALLOCATABLE, SAVE :: boxes
+    REAL(KIND=dp), DIMENSION(:), ALLOCATABLE, SAVE :: localunity,rr
 
     REAL(KIND=dp) ::  Integ_Reduced, zzz, tmp1, xbox, Tstar,   &
         &                Area_Reduced, g1, g2, &
@@ -108,7 +108,7 @@ MODULE PICO
     INTEGER :: nD
     INTEGER :: maxbastmp
     INTEGER :: ierr
-    !INTEGER ::  Indexx
+    INTEGER ::  Indexx
 
     LOGICAL ::  stat, Found,UnFoundFatal=.TRUE.
     LOGICAL, SAVE :: Firsttime=.TRUE.
@@ -122,7 +122,8 @@ MODULE PICO
     Params => GetSolverParams()
 
     Mesh => Model % Mesh  
-    
+
+    Nmax = Mesh % NumberOfBulkElements + Mesh % NumberOfBoundaryElements
     
     !------------------------------------------------------------------------------
     ! Get mandatory variables
@@ -143,13 +144,11 @@ MODULE PICO
     ! cm: for now, the 3d version works only with nodal variable, this should be fixed/cleaned in the future
     MeltNodal = ListGetLogical( Params,'Nodal Melt',Found) 
     IF (MeltNodal) THEN
-      Nmax = Solver % Mesh % NumberOfNodes
       IF (BasinVar % TYPE == Variable_on_elements .OR. BoxVar % TYPE == Variable_on_elements &
         & .OR. MeltVar % TYPE == Variable_on_elements) THEN
         CALL FATAL(SolverName, 'Basins, Boxes, or Melt is not a variable on nodes')
       END IF
     ELSE
-      Nmax = Solver % NumberOfActiveElements
       IF (BasinVar % TYPE /= Variable_on_elements .OR. BoxVar % TYPE /= Variable_on_elements &
         & .OR. MeltVar % TYPE /= Variable_on_elements) THEN
         CALL FATAL(SolverName, 'Basins, Boxes, or Melt is not a variable on elements')
@@ -336,7 +335,7 @@ MODULE PICO
     boxes(:) = 0.0_dp
     Melt(:) = 0.0_dp
     localunity(:) = 0.0_dp
-    rr(:) = 0.0
+    rr(:) = 0.0_dp
 
     !!------------------------------------------------------------------------------
     ! 2 - DEFINE BOXES FOR EACH BASIN
@@ -351,7 +350,7 @@ MODULE PICO
       CALL GetElementNodes( ElementNodes, Element, Solver)
       n = GetElementNOFNodes()
       NodeIndexes => Element % NodeIndexes
-      Indexx => Element % ElementIndex
+      Indexx = Element % ElementIndex
       
       ! check if floating or melting (look at groundedmask)
       IF ( ANY( GM(GMPerm(NodeIndexes(:))) .GE. mskcrit ) ) CYCLE
@@ -401,7 +400,7 @@ MODULE PICO
       CALL GetElementNodes( ElementNodes, Element, Solver )
       n = GetElementNOFNodes()
       NodeIndexes => Element % NodeIndexes
-      Indexx => Element % ElementIndex
+      Indexx = Element % ElementIndex
 
       IF ( ANY( GM(GMPerm(NodeIndexes(:))) .GE. mskcrit ) ) CYCLE    ! leave the loop if grounded point in the element
 
@@ -484,7 +483,7 @@ MODULE PICO
       CALL GetElementNodes( ElementNodes )
       n = GetElementNOFNodes()
       NodeIndexes => Element % NodeIndexes
-      Indexx => Element % ElementIndex
+      Indexx = Element % ElementIndex
 
       !Check that we are we work in 2D or 3D
       IF (MeltNodal .AND. MAXVAL(Boxnumber(BPerm(NodeIndexes(1:n))))==1 ) THEN
@@ -555,9 +554,9 @@ MODULE PICO
         CALL GetElementNodes( ElementNodes )
         n = GetElementNOFNodes()
         NodeIndexes => Element % NodeIndexes
-        Indexx => Element % ElementIndex
+        Indexx = Element % ElementIndex
 
-        !Check that we are we work in 2D or 3D
+        !Check that that melt is nodal or elemental
         IF (MeltNodal .AND. MAXVAL(Boxnumber(BPerm(NodeIndexes(1:n))))==kk ) THEN
           b = NINT(MAXVAL(Basin(BasinPerm(NodeIndexes(1:n)))))
           surf = SUM(localunity(NodeIndexes(1:n)))/n 
@@ -615,15 +614,11 @@ MODULE PICO
 
     CALL INFO(SolverName,"----------------------------------------", Level=1)
     WRITE(meltValue,'(F20.2)') Integ_Reduced*0.917/1.0e9
-    Message='PICO INTEGRATED BASAL MELT [Gt/a]: '//meltValue ! 0.917/1.0e6 to convert m3/a in Gt/a
-    CALL INFO(SolverName,Message,Level=1)
+    Message = 'PICO INTEGRATED BASAL MELT [Gt/a]: '//meltValue ! 0.917/1.0e9 to convert m3/a in Gt/a
+    CALL INFO(SolverName, Message, Level=1)
     CALL INFO(SolverName,"----------------------------------------", Level=1)
-
-    !DEALLOCATE(Zbox, Abox, Tbox, Sbox, T0, S0, rr, localunity)
-    !DEALLOCATE(basin_Reduced,basinmax,boxes)
-    !DEALLOCATE(Basis, dBasisdx) 
-
-    ! reverse signe for Elmer (loss of mass (ie melt) is negative)
+    
+    ! reverse signe for Elmer (loss of mass (i.e. melt) is negative)
     Melt = -Melt
 
   END SUBROUTINE boxmodel_solver

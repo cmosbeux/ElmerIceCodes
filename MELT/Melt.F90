@@ -83,7 +83,7 @@ SUBROUTINE MeltSolver( Model,Solver,dt,TransientSimulation )
       !---------------------------------------
       !2 - Run the BoxModel Solver (PICO.F90)
       !---------------------------------------
-      CALL boxmodel_solver( Model,Solver,dt,TransientSimulation)
+      CALL boxmodel_solver(Model,Solver,dt,TransientSimulation)
 
     CASE DEFAULT
         CALL FATAL(SolverName,'Parameterisation does not exist.')
