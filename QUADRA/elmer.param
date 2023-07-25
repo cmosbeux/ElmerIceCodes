@@ -1,0 +1,101 @@
+!----------------------------------------------------------------------
+!                            PHYSICAL PARAMETERS
+!----------------------------------------------------------------------
+! the SI units are kg (kilogram) - m (meter) - s (second)
+! the usual units in Elmer are MPa (Megapascal) - m (meter) - yr (year)
+! here we use MPa (Megapascal) - m (meter) - d (day)
+!----------------------------------------------------------------------
+
+$yearinday = 365                              ! nb of days in year (depend on calendar) (d)
+$dayinsec  = 24 * 60 * 60                     ! nb of seconds in day (s)
+$yearinsec = yearinday * dayinsec             ! nb of seconds in year (s)
+
+$rhoi_SI   = 917.0                            ! Ice density (kg.m^-3)
+$rhoi      = rhoi_SI / (1.0e6 * dayinsec^2)   ! Ice density (MPa.m^-2.d^2)
+
+$Lf_SI     = 3.34e5                           ! Fusion Latent heat of Ice (J.kg^-1)
+$Lf        = Lf_SI * dayinsec^2               ! Fusion Latent heat of Ice (m^2.d^-2)
+
+$zsl       = 0.0                              ! Sea level elevation (m). under sea level z<0. 
+
+$rhosw_SI  = 1028.0                           ! Sea water density (kg.m^-3)
+$rhow      = rhosw_SI / (1.0e6 * dayinsec^2)  ! Sea water density (MPa.m^-2.d^2)
+
+$rhofw_SI  = 1000.0                           ! Fresh water density (kg.m^-3)
+$rhofw     = rhofw_SI / (1.0e6 * dayinsec^2)  ! Fresh water density (MPa.m^-2.d^2)
+
+$cpw_SI    = 3974                             ! Specific heat capacity of sea water (J.kg^-1.°C^-1)
+$cpw       = cpw_SI * dayinsec^2              ! Specific heat capacity of sea water (m^2.d^-2.°C^-1)
+
+$grav_SI   = 9.81                             ! Gravity (m.s^-2)
+$gravity   = -grav_SI * dayinsec^2            ! Gravity (m.d^-2) 
+
+!$lambda1   = -0.0573                          ! Liquidus slope  (°C.PSU^-1)
+$lambda1   = -0.0575
+$lambda2   = 0.0832                           ! Liquidus intercept  (°C)
+!$lambda3   = -7.53e-8 * grav_SI * rhosw_SI    ! Liquidus pressure coefficient  (°C.m^-1)
+$lambda3   = -7.59e-4
+
+$beta_S    = 7.86e-4                          ! Salinity contraction coefficient (PSU^-1)
+
+$coriolis  = -1.4e-4 * dayinsec               ! Coriolis parameter (d^-1)
+
+!----------------------------------------------------------------------
+!                         MODEL PARAMETERS
+!---------------------------------------------------------------------
+
+$n         = 3.0                              ! Glen exponent (-)
+
+$Hmin      = 1.0                              ! Thickness limiter threshold (m)
+
+$Shear     = 1.0e-16                          ! Shear rate limiter threshold (d^-2)
+
+$Vmin      = 1.0e-6                           ! Velocity limiter threshold (min velocity for linearisation) (m.d^-1)
+
+$Vthres    = 300 / 365                        ! Velocity threshold u_0 (see Joughin's paper) (m.d^-1)
+
+$Hthres    = 75                               ! Thickness threshold (see Joughin's paper) (m)
+
+
+!----------------------------------------------------------------------
+!                         MELT PARAMETERISATION PARAMETERS
+!----------------------------------------------------------------------
+! the SI units are kg (kilogram) - m (meter) - s (second)
+! the usual units in Elmer are MPa (Megapascal) - m (meter) - yr (year)
+! here we use MPa (Megapascal) - m (meter) - d (day)
+
+! this file contains parameters relative to :
+!                  - quadratic local melt parameterisation
+!                  - PICO melt parameterisation
+!---------------------------------------------------------------------
+
+!---------------------------------------------------------------------
+! quadratic local melt parameterisation
+! see (Burgard et al. 2022) for definition of the parameters and example of tuning
+!---------------------------------------------------------------------
+
+$slope     = 2.9e-3                           ! Slope for the calculation of melt (mean_slope, semi-local, local...). In our case : Mean Antarctic slope sin(slope) = 2.9e-3 (Burgard et al. 2022)
+
+$K         = 11.6e-5                          ! Coefficient In our case : coefficient tuned in Burgard et al. 2022
+!$K         = 7.9e-5
+
+!--------------------------------------------------------------------
+! PICO melt parameterisation
+! see (Reese et al. (2018)) or (Burgard et al. 2022) for the definition of the parameters and example of tuning
+!--------------------------------------------------------------------
+
+$Nbox_PICO       = 5                                         ! Nb of boxes in PICO (-)
+
+$gammaT_PICO_SI  = 5.5e-5                                    ! Effective turbulent temperature exchange velocity (m.s^-1)
+$gammaT_PICO     = gammaT_PICO_SI * dayinsec                 ! Effective turbulent temperature exchange velocity (m.d^-1)
+
+$C_PICO_SI       = 2e6                                       ! Overturning coefficient (m^6.s^-1.kg^-1)
+$C_PICO          = C_PICO_SI * (1.0e6 * dayinsec^3)          ! Overturning coefficient (m^5.d^-3.MPa^-1)
+
+$alpha_PICO      = 7.5e-5                                    ! Thermal expansion coefficient for linear EOS (°C^-1)
+$beta_PICO       = 7.7e-4                                    ! Salinity contraction coefficient for linear EOS (PSU^-1)
+
+$rhostar_SI_PICO = 1033                                      ! In situ density for linear EOS (kg.m^-3)
+$rhostar_PICO    = rhostar_SI_PICO / (1.0e6 * dayinsec^2)    ! In situ density for linear EOS (MPa.m^-2.d^2)
+
+$meltfac         = rhosw_SI * cpw_SI / ( rhoi_SI * Lf_SI )   ! (°C^-1)

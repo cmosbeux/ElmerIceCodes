@@ -1,0 +1,36 @@
+!###################### FILE ########################
+! WARNING : the number of characters is limited to 128.
+!
+! define simulation name
+$name="ANT50.GL1-ISMIP6"
+!
+! define data_dir
+$data_dir = "/ccc/work/cont003/gen6066/gen6066/ISMIP6/ISMIP6_ANT"
+!
+! define output_dir
+$out_dir = "/ccc/scratch/cont003/gen6066/cailletj/ELMER/ANT50.GL1/ANT50.GL1-ISMIP6/ANT50.GL1-ISMIP6_S"
+!
+!-----------------------------------------------------------
+! BMB files
+!-----------------------------------------------------------
+! define the PICO file
+!$file_pico = "FORCING/OCEAN/PICO/CESM2_SSP585_years_PICO.nc"
+!
+! define the quadratic file
+!$file_salinity_quadratic = "FORCING/OCEAN/ACTUAL/salinity_8km_x_60m_19952014.nc"
+!$file_temperature_quadratic = "FORCING/OCEAN/ACTUAL/temperature_8km_x_60m_19952014.nc"
+!
+$file_salinity_quadratic = "FORCING/OCEAN/CCSM4/CCSM4_RCP85_salinity_8km_x_60m.nc"
+$file_temperature_quadratic = "FORCING/OCEAN/CCSM4/CCSM4_RCP85_temperature_8km_x_60m.nc"
+!
+$file_correction = "FORCING/OCEAN/ACTUAL/correction_IMBIE_quadratic_04.nc"
+!
+!-----------------------------------------------------------
+!RESTART
+!-----------------------------------------------------------
+$file_restart="RST_simplified2/ISMIP6_W1-HistAE_002.restart.nc"
+!
+!-----------------------------------------------------------
+!RESTART
+!-----------------------------------------------------------
+$file_basins = "BASIN/Mask_SubRegions_IMBIE.nc"

@@ -1,0 +1,284 @@
+
+! time/restart/output management
+!$id="<ID>"
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+include elmer.param
+include elmer.incf
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Header
+  Mesh DB "." "MSH"
+End
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Constants
+  Calendar = Real $yearinday
+
+  !Physical
+  Ice density = Real $rhoi
+  Ice fusion latent heat = Real $Lf
+  Sea Level = Real $zsl
+  Water Density = Real $rhow
+  Sea Water Specific heat = Real $cpw
+  Gravity = Real $gravity
+  Liquidus slope = Real $lambda1
+  Liquidus intercept = Real $lambda2
+  Liquidus pressure coeff = Real $lambda3
+  Gravity = Real $gravity
+  Salinity coefficient = Real $beta_S
+  Coriolis = Real $coriolis
+  
+  ! Quadratic
+  Slope = Real $slope
+  Coeff_K = Real $K
+
+End
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Simulation
+
+!# Definition of the projection, see ProjUtils documentation
+! Antarctica EPSG:3031
+  projection type = String "polar stereographic south"
+  central_meridian = Real 0.0
+  latitude_of_origin = Real -71.0
+
+  Coordinate System  = Cartesian 2D
+
+  Simulation Type = Transient
+  Simulation Timing = Logical True
+
+  Timestepping Method = "bdf"
+  BDF Order = 2
+  Timestep Intervals(1) = 2
+  Timestep Sizes(1) = 365 
+
+  !! Add check on the SSAnorm and Hnorm to force Exit in case Elmer did not stop before
+  !Exit Condition = Variable Time
+  !   Real Procedure "USF_ExitCondition" "ExitCondition"
+
+  Steady State Max Iterations = 4
+  Steady State Min Iterations = 2
+
+  max output level = 50
+  Post File = test.vtu
+ 
+End
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Body 1
+  Equation = 1
+  Material = 1
+  Body Force = 1
+End
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Body Force 1
+  Flow BodyForce 1 = Real 0.0
+  Flow BodyForce 2 = Real 0.0
+  Flow BodyForce 3 = Real $gravity
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Material 1
+! Material properties
+  Viscosity Exponent = Real $1.0/n
+  Critical Shear Rate = Real $Shear
+
+  SSA Mean Viscosity = Equals mueta2
+  SSA Mean Density = Real $rhoi
+  SSA Critical Thickness = Real $Hmin
+
+  ! definition of the friction law (linear, Weertman, Coulomb or Regularized coulomb)
+!  SSA Friction Law = String "Regularized coulomb"
+!    ! Coulomb Regularised needed parameter
+!    ! -------------------------------------
+!    ! Friction Parameter = Beta
+!    ! Friction Threshold Velocity = u_0
+!    ! Friction Threshold Height = Treshold in Haf when to start descreasing friction toward GL 
+!    !                                => requires body force section (SlipCoef)
+!    ! Friction Exponent = m 
+!    ! Friction Linear Velocity = u_lin (Min velocity for linearisation where ub=0)
+!    ! Values of the various coeficient comes from Joughin et al. (XXXX)
+!    !
+!    SSA Friction Parameter = Variable beta_cr, Haf
+!       Real Procedure "SlipCoef" "CalculSlc_haf"
+!    SSA Friction Threshold Velocity = Real 300.0
+!    SSA Friction Threshold Height = Real 75.0
+!    SSA Friction Exponent = Real $1.0/n  
+!       ! Commented: Why need SSA Friction Exponent and Viscosity Exponent they are the same ????
+!    SSA Friction Linear Velocity = Real 0.0001
+
+  SSA Friction Law = String "linear"
+    ! linear needed parameter
+    ! -------------------------------------
+     SSA Friction Parameter = Equals beta_1
+
+!! For Save scalar to compute mass flux (=H*SSA_UV)
+  Flux = Equals H
+
+End
+
+!#-----------------------------------------------------------------------
+!#                          READ RESTART SOLVER
+!#-----------------------------------------------------------------------
+!# SOLVER to read restart from netcdf file
+!#     - time variable inputs :
+!#                * h            : the only really pronostic variable
+!#                * ssa velocity : if available, it speed up the convergence of the first time step
+!#                * groundedmask : needed for SSA because now flotation is call after the SSA solver
+!#                * zs           : needed for SSA to compute the surface slope
+!#                * zb           : needed for SSA to retreive the thickness
+!#                * Haf          : needed for SSA to adjust beta_cr and because flotation called after SSA
+!#
+!#     - constant input :           
+!#                * bedrock      : Bedrock altitude used to compute Haf
+!#                * mueta2       : Mean SSA viscosity
+!#                * beta_1       : Sliding coefficient (beta_m in eq 21 gagliardini, 2013 with m=1)
+!#                
+!#
+!#     - output : restart variables
+!#
+!#     - option : Melt keyword if input from another grid
+!#                (as in M2M tools to change partition and interpolation .result)
+!#
+!#     - comments: Please document in the netcdf the source of each constant field
+!#-----------------------------------------------------------------------
+Solver 1
+   Exec Solver = Before Simulation
+   Equation = "UGridDataReader"
+   Procedure = "ElmerIceSolvers" "UGridDataReader"
+
+   File Name = File "$data_dir$/$file_restart$"
+
+!# Read last time frame of the restart
+   Time Index = Integer -1
+
+!# Time variable inputs
+   !# geometry
+   Variable Name 1 = File "zb"
+   Variable Name 2 = File "groundedmask"
+
+!# Export Constant inputs to feed next restart
+   Exported Variable 1 = zb
+   Exported Variable 2 = groundedmask
+End
+
+Solver 2
+   Exec Solver = Never 
+   !Exec Solver = Before TimeStep
+   !Exec Interval =$ 10 / 5
+
+   Equation = "GridDataReader1"
+   Procedure = "MyGridDataReader" "GridDataReader"
+   Variable = -nooutput "dumyGrid"
+
+   FileName = File "$data_dir$/$file_salinity_quadratic$"
+   Variable 1 = File "salinity"
+   Target Variable 1 = String "salinity"
+
+   !Is Time Counter = logical True
+   !Is Time Index = logical True
+   Time Offset = Real -365.0
+ 
+   X Dim Name = File "x"
+   Y Dim Name = File "y"
+   Z Dim Name = File "z"
+   Time Dim Name = File "time"
+
+   X Var Name = File "x"
+   Y Var Name = File "y"
+   Z Var Name = File "z"
+   Time Var Name = File "time"
+
+   Elmer Coordinate 3 = String "zb"
+   Get Cell Value = Logical True
+   Allow bound mismatch = Logical True
+   Read full array = logical True
+
+   !Debug = Logical True
+
+   Exported Variable 1 = String "salinity"
+End
+
+Solver 3
+   !Exec Solver = Never
+   Exec Solver = Before TimeStep
+   !Exec Interval =$ 365 / dt
+   !Exec Solver = Before Simulation
+
+   Equation = "GridDataReader2"
+   Procedure = "MyGridDataReader" "GridDataReader"
+   Variable = -nooutput "dumyGrid"
+
+   FileName = File "$data_dir$/$file_temperature_quadratic$"
+   Variable 1 = File "temperature"
+   Target Variable 1 = String "temperature"
+
+  ! Is Time Counter = logical True
+  ! Is Time Index = logical True
+   Time Offset = Real -365.0          ! add 365 * (nb_yeardecalage - 1), ok if time = day after a certain date
+    
+   X Dim Name = File "x"
+   Y Dim Name = File "y"
+   Z Dim Name = File "z"
+   Time Dim Name = File "time"
+
+   X Var Name = File "x"
+   Y Var Name = File "y"
+   Z Var Name = File "z"
+   Time Var Name = File "time"
+
+   Elmer Coordinate 3 = String "zb"
+   Get Cell Value = Logical True
+   Allow bound mismatch = Logical True
+   Read full array = logical True
+
+   !Debug = Logical True
+
+   Exported Variable 1 = String "temperature"
+End
+
+Solver 4
+   Exec Solver = Never
+   !Exec Solver = Before Simulation
+   Equation = "point"
+   Variable = -nooutput "dumy"
+   procedure = "nearestpoint" "nearestpoint"
+
+   ! global basins
+   Variable 1 = File "SubBasins_extrap"
+   Variable 1 data file = File "$data_dir$/$file_basins$"
+   Target Variable 1 = String "basins"
+
+   Exported Variable 1 = -dofs 1 -elem basins
+End
+
+Solver 5
+   Exec Solver = Never 
+   !Exec Solver = Before Timestep
+   Equation = "quadratic melt"
+   Variable = -nooutput dummy
+   Procedure = "quadratic_model" "quadratic_solver"
+
+   !# option
+   Grounding Line Melt = Logical False
+   Slope method = string "global"     ! local ou global
+   !Correction = Logical True
+   !Data file = File "$data_dir$/$file_correction$"
+
+   !# output variables
+   Exported Variable 1 = -dofs 1 -elem Melt
+   Exported Variable 2 =  TF
+End
+
+!#####
+Equation 1
+  Active Solvers (5)= 1 2 3 4 5
+End
+
+!#####
+Boundary Condition 1
+  Name = "Ice Front"
+  Target Boundaries = 1
+
+  Calving Front = logical true
+
+  Save Scalars = Logical True
+End
