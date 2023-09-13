@@ -65,7 +65,7 @@ MODULE PICO
     TYPE(Element_t),POINTER ::  Element
     TYPE(Nodes_t),SAVE :: ElementNodes
     TYPE(GaussIntegrationPoints_t) :: IntegStuff
-    REAL(kind=dp) :: u, v, w, SqrtElementMetric, s, surf
+    REAL(kind=dp) :: u, v, w, SqrtElementMetric, s, surf, scaling
     REAL(kind=dp),ALLOCATABLE,SAVE :: Basis(:), dBasisdx(:,:)
     INTEGER, POINTER :: NodeIndexes(:)
     INTEGER :: Nmax
@@ -203,8 +203,15 @@ MODULE PICO
       alpha    = ListGetCReal( Model % Constants, 'Thermal Expansion Coefficient EOS', UnFoundFatal = UnFoundFatal )
       beta     = ListGetCReal( Model % Constants, 'Salinity Contraction Coefficient EOS', UnFoundFatal = UnFoundFatal )
       rhostar  = ListGetCReal( Model % Constants, 'In Situ Density EOS', UnFoundFatal = UnFoundFatal )
-      meltfac  = ListGetCReal( Model % Constants, 'Melt Factor', UnFoundFatal = UnFoundFatal )     
-  
+      meltfac  = ListGetCReal( Model % Constants, 'Melt Factor', UnFoundFatal = UnFoundFatal )
+
+      scaling  = ListGetCReal( Model % Constants, 'Scaling', Found )
+      IF(.NOT.Found) THEN
+          CALL WARN(SolverName,'Keyword >Scaling< not found  in section >Constant<')
+          CALL WARN(SolverName,'Taking default value Scaling = 1')
+          Scaling = 1.0
+      END IF
+
       
       !cy: orignal version looks at the maximal basin number and loop over the basins. this works for PanAntarctic
       ! simulations but not for region simulations where we do not simulate all the basins
@@ -620,6 +627,9 @@ MODULE PICO
     
     ! reverse signe for Elmer (loss of mass (i.e. melt) is negative)
     Melt = -Melt
+
+    ! scaling if indicated
+    Melt = Scaling * Melt
 
   END SUBROUTINE boxmodel_solver
 
