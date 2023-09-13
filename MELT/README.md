@@ -51,7 +51,7 @@ Solver 5
   Exported Variable 5 = -dofs 1 -elem Melt
 End
 ```
-The solver works both elmentaly and nodaly. Nodal variables can be forced with `Nodal Melt = Logical False`
+The solver works both elmentaly and nodaly. Nodal variables can be forced with `Nodal Melt = Logical True`
 
 ```f90
   Exported Variable 4 = -dofs 1 -elem Boxes
