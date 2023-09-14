@@ -65,7 +65,7 @@ MODULE PICO
     TYPE(Element_t),POINTER ::  Element
     TYPE(Nodes_t),SAVE :: ElementNodes
     TYPE(GaussIntegrationPoints_t) :: IntegStuff
-    REAL(kind=dp) :: u, v, w, SqrtElementMetric, s, surf, scaling
+    REAL(kind=dp) :: u, v, w, SqrtElementMetric, s, surf
     REAL(kind=dp),ALLOCATABLE,SAVE :: Basis(:), dBasisdx(:,:)
     INTEGER, POINTER :: NodeIndexes(:)
     INTEGER :: Nmax
@@ -89,7 +89,7 @@ MODULE PICO
     REAL(KIND=dp) :: Time
 
     !! Physical Parameters
-    REAL(KIND=dp), SAVE :: sealevel, lbd1, lbd2, lbd3, meltfac, K, gT,  rhostar, CC,beta, alpha, mskcrit
+    REAL(KIND=dp), SAVE :: sealevel, lbd1, lbd2, lbd3, meltfac, K, gT,  rhostar, CC,beta, alpha, mskcrit,  scaling
     INTEGER, SAVE :: boxmax,MaxBas
     LOGICAL :: llGL, PanAntarctic, MeltNodal
 
