@@ -252,7 +252,7 @@ MODULE PICO
       NetCDFstatus = nf90_inquire_dimension( ncid, tmeanid , len = nlen )
     
       IF (nlen.NE.MaxBas .AND. PanAntarctic) THEN
-        CALL Fatal(Trim(SolverName),"Number of basins do not agree")
+        CALL Fatal(Trim(SolverName),"Number of basins does not agree")
       ELSE IF (nlen.EQ.MaxBas .AND. PanAntarctic) THEN
         CALL INFO(Trim(SolverName), 'PanAntarctic Simulation', Level = 5)
       ELSE
