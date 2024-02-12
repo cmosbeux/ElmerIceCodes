@@ -2,7 +2,7 @@
 
 ### Authors
 
-Cyrille Mosbeubx, Benoit Urruty, Justile Caillet, Fabien Gillet-Chaulet
+Cyrille Mosbeubx, Benoit Urruty, Justine Caillet, Fabien Gillet-Chaulet
 
 ## Intro 
 
