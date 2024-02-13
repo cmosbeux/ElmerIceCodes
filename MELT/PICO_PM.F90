@@ -89,7 +89,7 @@ MODULE PICO
     REAL(KIND=dp) :: Time
 
     !! Physical Parameters
-    REAL(KIND=dp), SAVE :: sealevel, lbd1, lbd2, lbd3, yearinday, meltfac, K, gT,  rhostar, CC,beta, alpha, mskcrit, scaling
+    REAL(KIND=dp), SAVE :: sealevel, lbd1, lbd2, lbd3, yearinday, meltfac, K, gT,  rhostar, CC,beta, alpha, mskcrit
     INTEGER, SAVE :: boxmax,MaxBas
     LOGICAL :: llGL, PanAntarctic, MeltNodal
 
@@ -186,7 +186,7 @@ MODULE PICO
       Firsttime=.False.
 
       ! - Grounding line :
-      llGL      = ListGetLogical( Params, 'Grounding Line Melt', UnFoundFatal = UnFoundFatal )
+           llGL      = ListGetLogical( Params, 'Grounding Line Melt', UnFoundFatal = UnFoundFatal )
       ! - Offset for reading data :
            TimeOffset= ListGetInteger( Params, 'Time Counter start', UnFoundFatal = UnFoundFatal )
 
@@ -198,6 +198,7 @@ MODULE PICO
       lbd1     = ListGetCReal( Model % Constants, 'Liquidus slope', UnFoundFatal = UnFoundFatal )
       lbd2     = ListGetCReal( Model % Constants, 'Liquidus intercept', UnFoundFatal = UnFoundFatal )
       lbd3     = ListGetCReal( Model % Constants, 'Liquidus pressure coeff', UnFoundFatal = UnFoundFatal )
+      yearinday= ListGetCReal( Model % Constants, 'Calendar', UnFoundFatal = UnFoundFatal )
 
       ! - PICO : 
       boxmax   = ListGetInteger( Model % Constants, 'Nb Boxes', UnFoundFatal = UnFoundFatal )
@@ -206,15 +207,8 @@ MODULE PICO
       alpha    = ListGetCReal( Model % Constants, 'Thermal Expansion Coefficient EOS', UnFoundFatal = UnFoundFatal )
       beta     = ListGetCReal( Model % Constants, 'Salinity Contraction Coefficient EOS', UnFoundFatal = UnFoundFatal )
       rhostar  = ListGetCReal( Model % Constants, 'In Situ Density EOS', UnFoundFatal = UnFoundFatal )
-      meltfac  = ListGetCReal( Model % Constants, 'Melt Factor', UnFoundFatal = UnFoundFatal )
-
-      scaling  = ListGetCReal( Model % Constants, 'Scaling', Found )
-      IF(.NOT.Found) THEN
-          CALL WARN(SolverName,'Keyword >Scaling< not found  in section >Constant<')
-          CALL WARN(SolverName,'Taking default value Scaling = 1')
-          Scaling = 1.0
-      END IF
-
+      meltfac  = ListGetCReal( Model % Constants, 'Melt Factor', UnFoundFatal = UnFoundFatal )     
+  
       
       !cy: orignal version looks at the maximal basin number and loop over the basins. this works for PanAntarctic
       ! simulations but not for region simulations where we do not simulate all the basins
@@ -255,7 +249,7 @@ MODULE PICO
       NetCDFstatus = nf90_inquire_dimension( ncid, tmeanid , len = nlen )
     
       IF (nlen.NE.MaxBas .AND. PanAntarctic) THEN
-        CALL Fatal(Trim(SolverName),"Number of basins does not agree")
+        CALL Fatal(Trim(SolverName),"Number of basins do not agree")
       ELSE IF (nlen.EQ.MaxBas .AND. PanAntarctic) THEN
         CALL INFO(Trim(SolverName), 'PanAntarctic Simulation', Level = 5)
       ELSE
@@ -320,11 +314,11 @@ MODULE PICO
           TimePoint = VisitedTimes + TimeOffset
         ELSE
           TimePoint = ListGetInteger( Params, "Time Index", Found )
-          IF (.NOT.Found) THEN
-            Time = GetTime()
-            dt = GetTimeStepSize()
-            TimePoint = floor((time/yearinday)-(dt/yearinday)/2) + 1 + TimeOffset
-          END IF
+           IF (.NOT.Found) THEN
+             Time = GetTime()
+             dt = GetTimeStepSize()
+             TimePoint = floor((time/yearinday)-(dt/yearinday)/2) + 1 + TimeOffset
+           END IF
         END IF
         !TimePoint = max(1,min(TimePoint,nTime))
         CALL INFO(Trim(SolverName),"Use Time Index: "//I2S(TimePoint), Level=3)
@@ -341,8 +335,8 @@ MODULE PICO
     IF (VisitedTimes == 1) THEN
       write(*,*) T0(1)
      END IF  
-
-     S0(1:MaxBas) = S_mean(1:MaxBas,TimePoint)
+ 
+    S0(1:MaxBas) = S_mean(1:MaxBas,TimePoint)
 
     Boxnumber(:) = 0.0_dp
     totalmelt = 0.0_dp
@@ -632,18 +626,15 @@ MODULE PICO
     CALL INFO(TRIM(SolverName),'Melt Other Boxes DONE', Level = 5)
 
     CALL INFO(SolverName,"----------------------------------------", Level=1)
-    WRITE(meltValue,'(F20.2)') Integ_Reduced*0.917/1.0e9
-    Message = 'PICO INTEGRATED BASAL MELT [Gt/a]: '//meltValue * Scaling  ! 0.917/1.0e9 to convert m3/a in Gt/a
-    CALL INFO(SolverName, Message, Level=1)
-    Message = 'PICO INTEGRATED BASAL MELT [Gt/j] (rho=917): '//meltValue 
+    !WRITE(meltValue,'(F20.2)') Integ_Reduced*0.917/1.0e9
+    !Message = 'PICO INTEGRATED BASAL MELT [Gt/a]: '//meltValue ! 0.917/1.0e9 to convert m3/a in Gt/a
+    WRITE(meltValue,'(F20.3)') Integ_Reduced*917/1.0e12
+    Message='PICO INTEGRATED BASAL MELT [Gt/j] (rho=917): '//meltValue 
     CALL INFO(SolverName, Message, Level=1)
     CALL INFO(SolverName,"----------------------------------------", Level=1)
     
     ! reverse signe for Elmer (loss of mass (i.e. melt) is negative)
     Melt = -Melt
-
-    ! scaling if indicated
-    Melt = Scaling * Melt
 
   END SUBROUTINE boxmodel_solver
 
