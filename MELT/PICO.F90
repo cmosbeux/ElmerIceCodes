@@ -188,7 +188,7 @@ MODULE PICO
       ! - Grounding line :
       llGL      = ListGetLogical( Params, 'Grounding Line Melt', UnFoundFatal = UnFoundFatal )
       ! - Offset for reading data :
-           TimeOffset= ListGetInteger( Params, 'Time Counter start', UnFoundFatal = UnFoundFatal )
+      TimeOffset= ListGetInteger( Params, 'Time Counter start', UnFoundFatal = UnFoundFatal )
 
       ! - PanAntarctic or Regional (important for the number of basins)
       PanAntarctic = ListGetLogical( Params, 'PanAntarctic', UnFoundFatal=UnFoundFatal )
@@ -632,9 +632,10 @@ MODULE PICO
     CALL INFO(TRIM(SolverName),'Melt Other Boxes DONE', Level = 5)
 
     CALL INFO(SolverName,"----------------------------------------", Level=1)
-    WRITE(meltValue,'(F20.2)') Integ_Reduced*0.917/1.0e9
-    Message = 'PICO INTEGRATED BASAL MELT [Gt/a]: '//meltValue * Scaling  ! 0.917/1.0e9 to convert m3/a in Gt/a
+    WRITE(meltValue,'(F20.2)') Integ_Reduced*0.917/1.0e9 * Scaling
+    Message = 'PICO INTEGRATED BASAL MELT [Gt/a]: '//meltValue   ! 0.917/1.0e9 to convert m3/a in Gt/a
     CALL INFO(SolverName, Message, Level=1)
+    WRITE(meltValue,'(F20.2)') Integ_Reduced*0.917/1.0e9
     Message = 'PICO INTEGRATED BASAL MELT [Gt/j] (rho=917): '//meltValue 
     CALL INFO(SolverName, Message, Level=1)
     CALL INFO(SolverName,"----------------------------------------", Level=1)
