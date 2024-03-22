@@ -497,7 +497,7 @@ FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
    END IF
 
    !  Friction Law Treshold Velocity          -> ut0
-   ut0 = GetConstReal( BC, 'Friction Threshold Velocity', GotIt )
+   ut0 = GetConstReal( BC, 'Friction Law Threshold Velocity', GotIt )
    IF (.NOT.GotIt) THEN
       CALL FATAL(USF_Name, 'Need a Friction Law Treshold Velocity for the Coulomb Friction Law ')
    END IF
@@ -518,7 +518,7 @@ FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
 
    hydrostatic = ListGetLogical(BC,'Friction Law Hydrostatic Transition',GotIt)   
    IF (.NOT.GotIt) THEN
-      CALL FATAL(USF_Name, 'Hydrostatic Transition &
+      CALL FATAL(USF_Name, 'Friction Law Hydrostatic Transition &
            &      Logical needed for the Coulomb Friction Law')
    END IF
 
@@ -557,7 +557,7 @@ FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
       zs = ZbVal(ZbPerm(Nodenumber)) + HVal(HPerm(Nodenumber))
       haf = zs + HVal(HPerm(Nodenumber)) * (1 - rho_i/rho_w)
       lbd = haf/hT
-
+      lbd = MAX(lbd,1.0_dp)
 
    ELSE
       ! Effective Pressure is either given as a variable 
