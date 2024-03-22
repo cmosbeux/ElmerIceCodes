@@ -63,7 +63,7 @@ FUNCTION SlidCoef_Contact ( Model, nodenumber, y) RESULT(Bdrag)
 
   LOGICAL :: FirstTime = .TRUE., GotIt, Yeschange, GLmoves, Friction, UnFoundFatal=.TRUE.
 
-  REAL (KIND=dp) ::  y, relChange, relChangeOld, Sliding_Budd, Sliding_Weertman, Friction_Coulomb
+  REAL (KIND=dp) ::  y, relChange, relChangeOld, Sliding_Budd, Sliding_Weertman, Friction_Coulomb, Friction_Coulomb_Regularized
 
   REAL(KIND=dp) :: comp, cond, TestContact
   CHARACTER(LEN=MAX_NAME_LEN) :: USF_Name='SlidCoef_Contact', Sl_Law, GLtype, FrictionVarName
