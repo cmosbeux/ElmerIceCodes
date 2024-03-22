@@ -496,7 +496,7 @@ FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
       CALL FATAL('Friction_Coulomb_Regularized', 'Need a Friction Law Linear Velocity for the Coulomb Friction Law ')
    END IF
 
-   !  Friction Law Treshold Velocity          -> ut0
+   !  Friction Law Treshold Velocity    
    ut0 = GetConstReal( BC, 'Friction Law Threshold Velocity', GotIt )
    IF (.NOT.GotIt) THEN
       CALL FATAL(USF_Name, 'Need a Friction Law Treshold Velocity for the Coulomb Friction Law ')
