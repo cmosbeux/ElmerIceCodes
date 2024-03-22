@@ -405,7 +405,7 @@ FUNCTION Friction_Coulomb (Model, nodenumber, y) RESULT(Bdrag)
   
   ! Stress may be not known at first time / or first steady iteration  
   IF ((t==t0).AND.(.Not.ASSOCIATED( NVariable )).AND.(Snn.GE.0.0_dp)) Bdrag = 1.0e20
-  
+
 END FUNCTION Friction_Coulomb
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -491,7 +491,7 @@ FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
    As = auxReal(i)
 
    !  Friction Law Linear Velocity          -> ut0
-   ul0 = GetConstReal( BC, 'Friction Linear Velocity', GotIt )
+   ul0 = GetConstReal( BC, 'Friction Law Linear Velocity', GotIt )
    IF (.NOT.GotIt) THEN
       CALL FATAL('Friction_Coulomb_Regularized', 'Need a Friction Law Linear Velocity for the Coulomb Friction Law ')
    END IF
@@ -509,14 +509,14 @@ FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
            &      (= n Glen law) for the Coulomb Friction Law')
    END IF
    ! height treshold
-   hT= GetConstReal( BC, 'Friction Threshold Height', GotIt )
+   hT= GetConstReal( BC, 'Friction Law Threshold Height', GotIt )
    IF (.NOT.GotIt) THEN
       CALL FATAL(USF_Name, 'Need a Friction Treshold Height &
            &      (= n Glen law) for the Coulomb Friction Law')
    END IF
 
 
-   hydrostatic = ListGetLogical(BC,'Hydrostatic Transition',GotIt)   
+   hydrostatic = ListGetLogical(BC,'Friction Law Hydrostatic Transition',GotIt)   
    IF (.NOT.GotIt) THEN
       CALL FATAL(USF_Name, 'Hydrostatic Transition &
            &      Logical needed for the Coulomb Friction Law')
