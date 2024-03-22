@@ -209,6 +209,8 @@ FUNCTION Friction_Coulomb (Model, nodenumber, y) RESULT(Bdrag)
   LOGICAL :: GotIt, FirstTime = .TRUE., Cauchy, UnFoundFatal
   REAL (KIND=dp), ALLOCATABLE :: Sig(:,:), normal(:), velo(:), Sn(:), AuxReal(:) 
   
+  CHARACTER(LEN=MAX_NAME_LEN) :: HName, ZbName
+
   SAVE :: Sig, normal, velo, DIM, Ind, Sn 
   SAVE :: t0, FirstTime
   
@@ -403,7 +405,271 @@ FUNCTION Friction_Coulomb (Model, nodenumber, y) RESULT(Bdrag)
   
   ! Stress may be not known at first time / or first steady iteration  
   IF ((t==t0).AND.(.Not.ASSOCIATED( NVariable )).AND.(Snn.GE.0.0_dp)) Bdrag = 1.0e20
+  
 END FUNCTION Friction_Coulomb
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!>  (3) Sliding Joughin et al. (2019)
+!>  This Friction law is a simplied version of Schoof friction law. Instead of a water pressue and some C 
+!>  parameters, we use a limit velocity u0 and a lambda parameter depending on the height above floatation
+!>  This has been introduced in the SSAMAterialModels for using with SSA. 
+
+FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
+
+   USE types
+   USE CoordinateSystems
+   USE SolverUtils
+   USE ElementDescription
+   USE DefUtils
+   IMPLICIT NONE
+   TYPE(Model_t) :: Model
+   REAL (KIND=dp) :: y , x              
+   INTEGER :: nodenumber
+   
+   TYPE(ValueList_t), POINTER :: BC, Material
+   TYPE(Variable_t), POINTER :: TimeVar, NVariable, StressVariable, NormalVar, FlowVariable
+   TYPE(Variable_t), POINTER :: HVar, ZbVar
+   TYPE(Element_t), POINTER ::  BoundaryElement, ParentElement
+   REAL(KIND=dp), POINTER :: StressValues(:), NormalValues(:), FlowValues(:)
+   REAL(KIND=dp), POINTER :: NValues(:), ZbVal(:), HVal(:)
+   INTEGER, POINTER :: StressPerm(:), NormalPerm(:), FlowPerm(:), NPerm(:)
+   INTEGER, POINTER :: ZbPerm(:), HPerm(:)
+   INTEGER :: DIM, i, j, Ind(3,3), n, other_body_id
+   REAL (KIND=dp) :: C, m, lambda, Ne, As, Pw, Pice, Bdrag 
+   REAL (KIND=dp) :: Snt, Snn, ut, un, ut0, t, t0, ul0 
+   REAL (KIND=dp) :: lbd, haf, zs, hT, rho_i, rho_w
+   LOGICAL :: GotIt, FirstTime = .TRUE., Cauchy, UnFoundFatal, Hydrostatic, Found
+   REAL (KIND=dp), ALLOCATABLE :: Sig(:,:), normal(:), velo(:), Sn(:), AuxReal(:) 
+   
+   CHARACTER(LEN=MAX_NAME_LEN) :: ZbName, Hname, USF_Name
+
+   SAVE :: Sig, normal, velo, DIM, Ind, Sn 
+   SAVE :: t0, FirstTime
+   
+   USF_Name='Friction_Coulomb_Regularized'
+
+   TimeVar => VariableGet( Model % Variables,'Time')
+   t = TimeVar % Values(1)
+
+   IF (FirstTime) THEN
+      FirstTime = .FALSE.  
+      t0 = t
+      DIM = CoordinateSystemDimension()
+      IF ((DIM == 2).OR.(DIM == 3))  THEN
+         ALLOCATE(Sig(DIM,DIM),normal(DIM), velo(DIM), Sn(DIM))
+      ELSE
+         CALL FATAL(USF_Name, 'Bad dimension of the problem')
+      END IF
+      Do i=1, 3
+         Ind(i,i) = i
+      END DO
+      Ind(1,2) = 4
+      Ind(2,1) = 4
+      Ind(2,3) = 5
+      Ind(3,2) = 5
+      Ind(3,1) = 6
+      Ind(1,3) = 6
+   END IF
+   
+   !Read the coefficients As, C, q, and m=1/n in the BC Section  
+   BoundaryElement => Model % CurrentElement
+   BC => GetBC(BoundaryElement)  
+   n = GetElementNOFNodes()
+   IF (.NOT.ASSOCIATED(BC))THEN
+      CALL Fatal(USF_Name, 'No BC Found')
+   END IF
+   
+   !  Friction Law Sliding Coefficient      -> As 
+   ALLOCATE (auxreal(n))
+   auxReal(1:n) = GetReal( BC, 'Friction Law Sliding Coefficient', GotIt )
+   IF (.NOT.GotIt) THEN
+      CALL FATAL('Friction_Coulomb_Regularized', 'Need a Friction Law Sliding Coefficient for the Coulomb Friction Law')
+   END IF
+   DO i=1, n
+      IF (NodeNumber== BoundaryElement % NodeIndexes( i )) EXIT 
+   END DO
+   As = auxReal(i)
+
+   !  Friction Law Linear Velocity          -> ut0
+   ul0 = GetConstReal( BC, 'Friction Linear Velocity', GotIt )
+   IF (.NOT.GotIt) THEN
+      CALL FATAL('Friction_Coulomb_Regularized', 'Need a Friction Law Linear Velocity for the Coulomb Friction Law ')
+   END IF
+
+   !  Friction Law Treshold Velocity          -> ut0
+   ut0 = GetConstReal( BC, 'Friction Threshold Velocity', GotIt )
+   IF (.NOT.GotIt) THEN
+      CALL FATAL(USF_Name, 'Need a Friction Law Treshold Velocity for the Coulomb Friction Law ')
+   END IF
+   !    
+   ! friction Law PowerLaw Exponent m
+   m = GetConstReal( BC, 'Friction Law PowerLaw Exponent', GotIt )
+   IF (.NOT.GotIt) THEN
+      CALL FATAL(USF_Name, 'Need a Friction Law PowerLaw Exponent &
+           &      (= n Glen law) for the Coulomb Friction Law')
+   END IF
+   ! height treshold
+   hT= GetConstReal( BC, 'Friction Threshold Height', GotIt )
+   IF (.NOT.GotIt) THEN
+      CALL FATAL(USF_Name, 'Need a Friction Treshold Height &
+           &      (= n Glen law) for the Coulomb Friction Law')
+   END IF
+
+
+   hydrostatic = ListGetLogical(BC,'Hydrostatic Transition',GotIt)   
+   IF (.NOT.GotIt) THEN
+      CALL FATAL(USF_Name, 'Hydrostatic Transition &
+           &      Logical needed for the Coulomb Friction Law')
+   END IF
+
+   IF (hydrostatic) THEN
+      ! The hydrostatical height above floatation can be computed based on the thickness and the basal elevation
+      ! get the ice base 
+      ZbName = ListGetString(BC, 'Bottom Surface Variable Name', UnFoundFatal=.TRUE.)
+      ZbVar => VariableGet( Model % Mesh % Variables, ZbName,UnFoundFatal=.TRUE.)
+      IF (.NOT.ASSOCIATED(ZbVar)) &
+         &    CALL FATAL('Friction_Coulomb_Regularized', '>Bottom Surface Variable Name< not found')
+      ZbPerm =>ZbVar % Perm
+      ZbVal => ZbVar % Values
+      !get the ice thickness 
+      HName = ListGetString(BC, 'Thickness Variable Name', UnFoundFatal=.TRUE.)
+      HVar => VariableGet( Model % Mesh % Variables, HName,UnFoundFatal=.TRUE.)
+      IF (.NOT.ASSOCIATED(ZbVar)) &
+         &    CALL FATAL('Friction_Coulomb_Regularized', '>Thickness Surface Variable Name< not found')
+      HPerm =>HVar % Perm
+      HVal => HVar % Values
+
+      !get densities
+      rho_i  = ListGetCReal( Model % Constants, 'ice density', Found )
+      IF(.NOT.Found) THEN
+         CALL WARN(USF_Name,'Keyword >ice density< not found  in section >Constant<')
+         CALL WARN(USF_Name,'Taking default value for ice density = 910.0 kg/m3')
+         rho_i = 910.0
+      END IF
+      rho_w  = ListGetCReal( Model % Constants, 'ocean density', Found )
+      IF(.NOT.Found) THEN
+         CALL WARN(USF_Name,'Keyword >ocean density< not found  in section >Constant<')
+         CALL WARN(USF_Name,'Taking default value for ocean density = 1028.0 kg/m3')
+         rho_w = 1028.0
+      END IF
+      
+      !Calculate lbd
+      zs = ZbVal(ZbPerm(Nodenumber)) + HVal(HPerm(Nodenumber))
+      haf = zs + HVal(HPerm(Nodenumber)) * (1 - rho_i/rho_w)
+      lbd = haf/hT
+
+
+   ELSE
+      ! Effective Pressure is either given as a variable 
+      ! or computed as N = -Snn - pw 
+      ! Get the effective pressure         
+      ! If NVariable does not exist, N will be computed as N = -Snn - pw         
+      NVariable => VariableGet( Model % Variables, 'Effective Pressure' )
+      IF ( ASSOCIATED( NVariable ) ) THEN
+         NPerm    => NVariable % Perm
+         NValues  => NVariable % Values
+   
+      ELSE 
+      ! Get the water Pressure from the Stokes keyword 'External Pressure'
+      ! Use the convention for the water pressure Pw > 0 => Compression
+         auxReal(1:n) = GetReal( BC, 'External Pressure', GotIt )
+         IF (.NOT.GotIt) THEN
+            CALL FATAL('Friction_Coulomb', 'Need External Pressure &
+            &      Or Variable Effective Pressure')
+         END IF
+         DO i=1, n
+            IF (NodeNumber== BoundaryElement % NodeIndexes( i )) EXIT 
+         END DO
+         ! Because the convention is External Pressure < 0 => Compression,
+         ! need to change the sign
+         Pw = -auxReal(i)
+      
+         ! Get the variables to compute tau_b
+         StressVariable => VariableGet( Model % Variables, 'Stress',UnFoundFatal=UnFoundFatal)
+         StressPerm    => StressVariable % Perm
+         StressValues  => StressVariable % Values
+         !
+         ! Cauchy or deviatoric stresses ?
+         !
+         other_body_id = BoundaryElement % BoundaryInfo % outbody
+         IF (other_body_id < 1) THEN ! only one body in calculation
+            ParentElement => BoundaryElement % BoundaryInfo % Right
+            IF ( .NOT. ASSOCIATED(ParentElement) ) ParentElement => BoundaryElement % BoundaryInfo % Left
+         ELSE ! we are dealing with a body-body boundary and assume that the normal is pointing outwards
+            ParentElement => BoundaryElement % BoundaryInfo % Right
+            IF (ParentElement % BodyId == other_body_id) ParentElement => BoundaryElement % BoundaryInfo % Left
+         END IF
+      
+         Material => GetMaterial(ParentElement)
+         Cauchy = ListGetLogical( Material , 'Cauchy', Gotit )
+   
+      END IF
+      DEALLOCATE(auxReal)
+   END IF
+   
+   ! Get the flow variables to compute ut
+   FlowVariable => VariableGet( Model % Variables, 'Flow Solution',UnFoundFatal=UnFoundFatal)
+   FlowPerm    => FlowVariable % Perm
+   FlowValues  => FlowVariable % Values
+   
+   ! Get the normal variable to compute the normal
+   NormalVar =>  VariableGet(Model % Variables,'Normal Vector',UnFoundFatal=UnFoundFatal)
+   NormalPerm => NormalVar % Perm
+   NormalValues => NormalVar % Values
+   
+   DO i=1, DIM
+      normal(i) = -NormalValues(DIM*(NormalPerm(Nodenumber)-1) + i)      
+      velo(i) = FlowValues( (DIM+1)*(FlowPerm(Nodenumber)-1) + i )
+   END DO
+   
+   un = SUM(velo(1:DIM)*normal(1:DIM)) 
+   ut = SQRT( SUM( (velo(1:DIM)-un*normal(1:DIM))**2.0 ) )
+   
+   IF (.NOT. hydrostatic) THEN
+      ! Compute Effective Pressure Ne
+      ! Effective pressure N >=0   
+      IF ( ASSOCIATED( NVariable ) ) THEN
+         Ne = NValues(NPerm(Nodenumber))
+      ELSE
+         DO i=1, DIM
+            DO j= 1, DIM
+               Sig(i,j) =  &
+                  StressValues( 2*DIM *(StressPerm(Nodenumber)-1) + Ind(i,j) )
+            END DO
+         END DO
+         ! Stress vector Sn       
+         DO i=1, DIM
+            Sn(i) = SUM(Sig(i,1:DIM)*normal(1:DIM)) 
+         END DO
+         ! Normal stress (still Cauchy or deviatoric)
+         Snn = SUM( Sn(1:DIM) * normal(1:DIM) ) 
+         ! Isotropic ice pressure
+         Pice = FlowValues((DIM+1)*FlowPerm(Nodenumber))
+   
+         IF (Cauchy) THEN 
+            ! At first time Snn = 0 and should be approximated by -pi
+            IF (ABS(Snn) < 1.0e-10*ABS(Pice)) Snn = -Pice
+         ELSE
+               Snn = Snn - Pice 
+         END IF
+   
+         ! Convention is such that Snn should be negative (compressive)
+         Ne = -Snn -Pw
+      ENDIF
+      !in the end we assign Ne to be the Lbd for the friction transition
+      Lbd = Ne
+   END IF
+
+   ut = MAX(ut,ul0)
+   Bdrag = Lbd * As * ( ut / (ut + ut0))**(1.0/m)
+   Bdrag = MIN(Bdrag,1.0e20_dp)
+   
+   ! Stress may be not known at first time / or first steady iteration  
+   IF ((t==t0).AND.(.Not.ASSOCIATED( NVariable )).AND.(Snn.GE.0.0_dp)) Bdrag = 1.0e20
+
+ END FUNCTION Friction_Coulomb_Regularized
+
+
 
 ! Sliding after Budd et al 1984, Annals of Glaciology 5, page 29-36.
 !
