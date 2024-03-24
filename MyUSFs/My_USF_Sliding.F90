@@ -557,7 +557,7 @@ FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
       zs = ZbVal(ZbPerm(Nodenumber)) + HVal(HPerm(Nodenumber))
       haf = zs + HVal(HPerm(Nodenumber)) * (1 - rho_i/rho_w)
       lbd = haf/hT
-      lbd = MAX(lbd,1.0_dp)
+      lbd = MIN(lbd,1.0_dp)
 
    ELSE
       ! Effective Pressure is either given as a variable 
@@ -665,7 +665,7 @@ FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
    Bdrag = MIN(Bdrag,1.0e20_dp)
    
    ! Stress may be not known at first time / or first steady iteration  
-   IF ((t==t0).AND.(.Not.ASSOCIATED( NVariable )).AND.(Snn.GE.0.0_dp)) Bdrag = 1.0e20
+   !IF ((t==t0).AND.(.Not.ASSOCIATED( NVariable )).AND.(Snn.GE.0.0_dp)) Bdrag = 1.0e20
 
  END FUNCTION Friction_Coulomb_Regularized
 
