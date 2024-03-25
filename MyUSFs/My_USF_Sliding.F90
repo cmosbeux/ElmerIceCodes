@@ -483,7 +483,7 @@ FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
    ALLOCATE (auxreal(n))
    auxReal(1:n) = GetReal( BC, 'Friction Law Sliding Coefficient', GotIt )
    IF (.NOT.GotIt) THEN
-      CALL FATAL('Friction_Coulomb_Regularized', 'Need a Friction Law Sliding Coefficient for the Coulomb Friction Law')
+      CALL FATAL(USF_Name, 'Need a Friction Law Sliding Coefficient for the Coulomb Friction Law')
    END IF
    DO i=1, n
       IF (NodeNumber== BoundaryElement % NodeIndexes( i )) EXIT 
@@ -493,7 +493,7 @@ FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
    !  Friction Law Linear Velocity          -> ut0
    ul0 = GetConstReal( BC, 'Friction Law Linear Velocity', GotIt )
    IF (.NOT.GotIt) THEN
-      CALL FATAL('Friction_Coulomb_Regularized', 'Need a Friction Law Linear Velocity for the Coulomb Friction Law ')
+      CALL FATAL(USF_Name, 'Need a Friction Law Linear Velocity for the Coulomb Friction Law ')
    END IF
 
    !  Friction Law Treshold Velocity    
@@ -524,6 +524,7 @@ FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
 
    IF (hydrostatic) THEN
       ! The hydrostatical height above floatation can be computed based on the thickness and the basal elevation
+
       ! get the ice base 
       ZbName = ListGetString(BC, 'Bottom Surface Variable Name', UnFoundFatal=.TRUE.)
       ZbVar => VariableGet( Model % Mesh % Variables, ZbName,UnFoundFatal=.TRUE.)
@@ -531,11 +532,12 @@ FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
          &    CALL FATAL('Friction_Coulomb_Regularized', '>Bottom Surface Variable Name< not found')
       ZbPerm =>ZbVar % Perm
       ZbVal => ZbVar % Values
+
       !get the ice thickness 
       HName = ListGetString(BC, 'Thickness Variable Name', UnFoundFatal=.TRUE.)
       HVar => VariableGet( Model % Mesh % Variables, HName,UnFoundFatal=.TRUE.)
-      IF (.NOT.ASSOCIATED(ZbVar)) &
-         &    CALL FATAL('Friction_Coulomb_Regularized', '>Thickness Surface Variable Name< not found')
+      IF (.NOT.ASSOCIATED(HVar)) &
+         &    CALL FATAL(USF_Name, '>Thickness Surface Variable Name< not found')
       HPerm =>HVar % Perm
       HVal => HVar % Values
 
@@ -555,9 +557,10 @@ FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
       
       !Calculate lbd
       zs = ZbVal(ZbPerm(Nodenumber)) + HVal(HPerm(Nodenumber))
-      haf = zs + HVal(HPerm(Nodenumber)) * (1 - rho_i/rho_w)
+      haf = zs - HVal(HPerm(Nodenumber)) * (1 - rho_i/rho_w)   
       lbd = haf/hT
       lbd = MIN(lbd,1.0_dp)
+      lbd = MAX(lbd,0.0_dp)
 
    ELSE
       ! Effective Pressure is either given as a variable 
@@ -607,7 +610,7 @@ FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
       DEALLOCATE(auxReal)
    END IF
    
-   ! Get the flow variables to compute ut
+   ! Get the flow variables to compute ut (tangencial velocity)
    FlowVariable => VariableGet( Model % Variables, 'Flow Solution',UnFoundFatal=UnFoundFatal)
    FlowPerm    => FlowVariable % Perm
    FlowValues  => FlowVariable % Values
@@ -661,7 +664,8 @@ FUNCTION Friction_Coulomb_Regularized (Model, nodenumber, y) RESULT(Bdrag)
    END IF
 
    ut = MAX(ut,ul0)
-   Bdrag = Lbd * As * ( ut / (ut + ut0))**(1.0/m)
+   ! We calculate Bdrag as Taub = Bdrag * u  
+   Bdrag = lbd * As * (ut + ut0)**(-1.0/m) * ut**(1.0/m-1.0)
    Bdrag = MIN(Bdrag,1.0e20_dp)
    
    ! Stress may be not known at first time / or first steady iteration  
