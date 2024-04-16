@@ -323,7 +323,8 @@ MODULE PICO
           IF (.NOT.Found) THEN
             Time = GetTime()
             dt = GetTimeStepSize()
-            TimePoint = floor((time/yearinday)-(dt/yearinday)/2) + 1 + TimeOffset
+            !everything is computed for daily units but we can scale it depending on the target unit
+            TimePoint = floor((time/(yearinday/scaling))-(dt/(yearinday/scaling))/2) + 1 + TimeOffset
           END IF
         END IF
         !TimePoint = max(1,min(TimePoint,nTime))
