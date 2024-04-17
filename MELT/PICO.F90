@@ -198,6 +198,7 @@ MODULE PICO
       lbd1     = ListGetCReal( Model % Constants, 'Liquidus slope', UnFoundFatal = UnFoundFatal )
       lbd2     = ListGetCReal( Model % Constants, 'Liquidus intercept', UnFoundFatal = UnFoundFatal )
       lbd3     = ListGetCReal( Model % Constants, 'Liquidus pressure coeff', UnFoundFatal = UnFoundFatal )
+      yearinday = ListGetCReal( Model % Constants, 'Calendar', UnFoundFatal = UnFoundFatal )
 
       ! - PICO : 
       boxmax   = ListGetInteger( Model % Constants, 'Nb Boxes', UnFoundFatal = UnFoundFatal )
