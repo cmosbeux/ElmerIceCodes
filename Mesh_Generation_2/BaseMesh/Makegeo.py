@@ -44,7 +44,7 @@ print('--------------')
 
 fname='Contour.geo'
 print('loading contour files...')
-Contour_dir = '../Contour_Amundsen/'
+Contour_dir = '../Contours/'
 A1=np.loadtxt(Contour_dir+'Contour_2.txt')
 A2=np.loadtxt(Contour_dir+'Contour_1.txt')
 print('done.')
