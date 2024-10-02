@@ -1,0 +1,5 @@
+   Linear System Solver = Iterative
+   Linear System Iterative Method = GCR
+   Linear System Preconditioning= ILU0
+   Linear System Convergence Tolerance= 1.0e-12
+   Linear System Max Iterations = 1000

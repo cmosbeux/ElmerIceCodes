@@ -1,0 +1,323 @@
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! .sif file for greenland mesh adaptation
+! mesh is adapted to equidistribute the interpolation error
+! of the thickness and velocity observation
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!name of the RUN : optimised mesh will be saved in MESH_$RUN
+$RUN="3old"
+! the name of the mesh to optimize
+$MESH_IN="contour"
+!##########################################################
+!##########################################################
+!## Mesh criteria
+!##########################################################
+!##########################################################
+$IMIN=3
+$IMAX=10
+$Tol=0.01
+!##########################################################
+!##########################################################
+!## Mesh criteria
+!##########################################################
+!##########################################################
+! Tolerated errors on U and H
+$U_err=2.5
+$H_err=20
+! Minimal and maximal mesh size
+$Hmin=1000.0
+$Hmax=50000.0
+!
+$Diffusivity=1.0
+!##########################################################
+!##########################################################
+!###### DATA FILES
+!##########################################################
+!##########################################################
+$TOPOGRAPHY_DATA="/scratch/cnt0021/gge6066/burruty/TiPACCS/DATA/BED/formeshing.nc"
+$VELOCITY_DATA="/scratch/cnt0021/gge6066/burruty/TiPACCS/DATA/VELOCITY/formeshing_vel.nc"
+!##########################################################
+!##########################################################
+include param.in
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Header
+  Mesh DB "." "$MESH_IN$"
+End
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Constants
+  sea level = Real $zsl
+  water density = Real $rhow
+
+  GL mesh grad = Real 0.2
+  GL mesh size = Real $Hmin
+
+  Hmin Extent = Real 10.0e3
+  Hmin in = Real $Hmin
+  Hmin Out = Real 20000.0
+End
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Simulation
+  Coordinate System  = Cartesian 2D 
+  Simulation Type = Steady
+
+  Steady State Min Iterations = $IMAX
+  Steady State Max Iterations = $IMAX
+
+  max output level = 10
+
+  Post File = "OPTIM_$RUN$.vtu"
+!  OutPut File = "OPTIM_$RUN$.result"
+End
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Body 1
+  Equation = 1
+  Material = 1
+  Body Force = 1
+End
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Body Force 1
+  Mu Hmin = Real $Hmin
+  Mu Hmax = Real $Hmax
+  Mu err =  Real $U_err
+
+  Mh Hmin =  Variable distance
+    Real procedure "USFs" "Hmin_d"
+  Mh Hmax =  Real $Hmax
+  Mh err =  Real $H_err
+
+  M3 Hmin = Variable distance
+   Real procedure "USFs" "Hmin_d"
+  M3 Hmax = Real $Hmax
+  M3 err =  Real 1.0
+
+  Distance = Real 0.0
+  Distance Condition = Variable GroundedMask
+    Real procedure "USFs" "DistanceCondGL"
+
+  f3 = Variable distance
+    real procedure "USFs" "dfunction"
+End
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Material 1
+  SSA Mean Density = Real $rhoi
+
+  GroundedAreaCoeff = Variable Groundedmask
+        Real procedure "USF_GroundedAreaCoeff" "GroundedAreaCoeff"
+End
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Solver 1
+  Equation = "ScatteredInter"
+  Variable = -nooutput "dumy"
+
+  procedure = "Scattered2DDataInterpolator" "Scattered2DDataInterpolator"
+  Optimize Bandwidth = logical false
+
+!!!!! NNI or linear (nn-c library)
+
+   Variable 1 = File "norm"
+   Target Variable 1 = String "Vobs"
+   Variable 1 data file = File "$VELOCITY_DATA$"
+   Variable 1 method = String "li"
+   Exported Variable 1 = "Vobs"
+
+   Variable 2 = File "thickness"
+   Target Variable 2 = String "H"
+   Variable 2 data file = File "$TOPOGRAPHY_DATA$"
+   Variable 2 method = String "li"
+   Exported Variable 2 = "H"
+End
+
+Solver 2
+  Equation = "Reader"
+  Variable = -nooutput "dumy2"
+
+  procedure = "GridDataReader" "GridDataReader"
+  Optimize Bandwidth = logical false
+
+
+  Read Full array = logical true
+
+!---- NOTE: File is case sensitive, String is not!
+  Filename = File "$TOPOGRAPHY_DATA$"
+
+  X Dim Name = String "X"
+  Y Dim Name = String "Y"
+
+
+  Variable 1 = File "bed"
+  Target Variable 1 = String "bedrock"
+  Exported Variable 1 = bedrock
+
+End
+
+Solver 3
+  Equation = "Flotation"
+  Variable = GroundedMask
+    Procedure = "Flotation2" "Flotation2"
+  Optimize Bandwidth = logical false
+
+  Grounded Mask Re-init = Logical True
+
+   Exported Variable 1 = zb
+   Exported Variable 2 = zs
+End
+
+
+Solver 4
+  Equation = "Distance"
+  Variable =  distance
+    Procedure = "DistanceSolve" "DistanceSolver1"
+    Optimize Bandwidth = logical false
+End
+
+Solver 5
+  Equation = "upd"
+  Procedure = "ElmerIceSolvers" "UpdateExport"
+
+   Exported Variable 1 = f3
+End
+
+
+! Compute the metric associated with f1
+! Compute the metric associated with f1
+!  1- compute projected gradient of f1
+Solver 6
+  Equation = "Nodal Gradient 1"
+  Variable = -nooutput "Gradient1"
+  Variable DOFs = 2
+  Procedure = "ElmerIce_MeshAdapt2D" "Compute2DNodalGradient"
+
+  Variable Name = string "vobs"
+End
+! 2- compute:
+!    - the hessian matrix by solving a diffusion equation:
+!   - the metric tensor
+Solver 7
+   Equation = "Metric1"
+   Procedure = "ElmerIce_MeshAdapt2D" "MMG2D_MetricAniso"
+
+   Metric Variable Name = String "Mu"
+   Hessian Variable Name = String "ddx1"
+   Gradient Name = String "Gradient1"
+   Diffusivity = Real $Diffusivity
+
+  include linsys.sif
+  ! Linear System Solver = Direct
+  ! Linear System Direct Method = umfpack
+   Linear System Refactorize = False
+End
+! Compute the metric associated with f2
+Solver 8
+  Equation = "Nodal Gradient 2"
+  Variable = -nooutput "Gradient2"
+  Variable DOFs = 2
+  Procedure = "ElmerIce_MeshAdapt2D" "Compute2DNodalGradient"
+  Variable Name = string "h"
+End
+Solver 9
+   Equation = "Metric2"
+   Procedure = "ElmerIce_MeshAdapt2D" "MMG2D_MetricAniso"
+
+   Metric Variable Name = String "Mh"
+   Hessian Variable Name = String "ddx2"
+   Gradient Name = String "Gradient2"
+   Diffusivity = Real $Diffusivity
+
+   include linsys.sif
+  ! Linear System Solver = Direct
+  ! Linear System Direct Method = umfpack
+   Linear System Refactorize = False
+End
+
+! Compute the metric associated with f3
+Solver 10
+  Equation = "Nodal Gradient 3"
+  Variable = -nooutput "Gradient3"
+  Variable DOFs = 2
+
+  Procedure = "ElmerIce_MeshAdapt2D" "Compute2DNodalGradient"
+  Variable Name = string "f3"
+End
+Solver 11
+   Equation = "Metric3"
+   Procedure = "ElmerIce_MeshAdapt2D" "MMG2D_MetricAniso"
+
+   Metric Variable Name = String "M3"
+   Hessian Variable Name = String "ddx3"
+   Gradient Name = String "Gradient3"
+   Diffusivity = Real $Diffusivity
+
+   include linsys.sif
+  ! Linear System Solver = Direct
+  ! Linear System Direct Method = umfpack
+   Linear System Refactorize = False
+End
+
+!! do the intersection of M1 and M2
+Solver 12
+   Equation = "MetricInt1"
+   Procedure = "ElmerIce_MeshAdapt2D" "MMG2D_MetricIntersect"
+
+   Metric Variable Name = String "M1M2"
+   Metric 1 Variable Name = String "Mh"
+   Metric 2 Variable Name = String "Mu"
+End
+Solver 13
+   Equation = "MetricInt2"
+   Procedure = "ElmerIce_MeshAdapt2D" "MMG2D_MetricIntersect"
+
+   Metric Variable Name = String "M1M2M3"
+   Metric 1 Variable Name = String "M1M2"
+   Metric 2 Variable Name = String "M3"
+End
+
+
+
+Solver 14
+  Equation = SaveScalars
+  Procedure =  "SaveData" "SaveScalars"
+  Filename = "f_$RUN$.dat"
+  Show Norm Index = Integer 2
+
+  Variable 1 = "Time"
+
+  Operator 2 = nodes
+
+  Variable 3 = "H"
+  Operator 3 = "int"
+
+  Variable 4 = "Vobs"
+  Operator 4 = "int"
+
+End
+
+Solver 15
+!! mandatory else Model % Mesh % Changed reset to .FALSE. in coupled simulations
+  Exec Solver = after timestep
+
+  Equation = "MMG"
+  Procedure = "ElmerIce_MeshAdapt2D" "MMG2DSolver"
+
+  Output file name = "MESH_$RUN$"
+  Metric Variable Name = String "M1M2M3"  
+
+  Angle detection = Real 1.0
+  hausd = Real 20000.0
+
+  Increment Mesh Number = logical false
+
+  Release previous mesh = Logical True
+
+  Steady State Convergence Tolerance = Real $Tol
+  Steady State Min Iterations = INTEGER $IMIN
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Equation 1
+  Active Solvers(15) = 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Boundary Condition 1
+  Target Boundaries(1) = 1
+End
