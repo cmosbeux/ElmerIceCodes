@@ -30,7 +30,7 @@ This command uses the `docker build` command to create a Docker image named `elm
 
 This command runs the Docker container and mounts a directory from your host machine to the container. By default, it mounts `/Users/cmosbeux` to `/home/elmer_usr/` inside the container.
 
-*Important*: Change /Users/cmosbeux to the directory you want to access from the container. For example:
+> ⚠️ **Warning:** Change /Users/cmosbeux to the directory you want to access from the container. For example:
 
 ```sh
 docker run -v /path/to/your/directory:/home/elmer_usr/ -it elmer
