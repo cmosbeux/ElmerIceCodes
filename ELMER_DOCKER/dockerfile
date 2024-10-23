@@ -30,6 +30,7 @@ RUN apt install -y \
         zip \
         vim \
         gmsh \
+        lua \
         curl
 
 # ARG to specify source directory path
