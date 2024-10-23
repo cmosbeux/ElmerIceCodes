@@ -29,6 +29,7 @@ RUN apt install -y \
         unzip \
         zip \
         vim \
+        gmsh \
         curl
 
 # ARG to specify source directory path

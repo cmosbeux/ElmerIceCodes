@@ -43,5 +43,15 @@ To run the Docker container, use the following command:
 ```sh
 make run
 ```
+## Important Notes
+
+> ⚠️ **Warning:** Once the container is closed, everything downloaded or created inside it will be deleted. To persist data, make sure to mount a directory from your host machine to the container. 
+
+If you realize that you need an extra software (e.g. installed via `apt-get`) in your docker image, you will have to add it in your dockerfile and build it again. 
+
+
+
+
+
 
 
