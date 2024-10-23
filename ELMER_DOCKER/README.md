@@ -8,7 +8,7 @@ This project uses Docker to containerize Elmer/Ice in an ubuntu environment. The
 
 ## Installation
 
-<span style="color: red;">**Warning:** Ensure Docker is running before executing the `make` commands.</span>
+> ⚠️ **Warning:** Ensure Docker is running before executing the `make` commands.
 
 1. **Install Docker**
 
@@ -16,7 +16,7 @@ This project uses Docker to containerize Elmer/Ice in an ubuntu environment. The
 
 2. **Open Terminal**
 
-   Open your Terminal application and navigate to your the ELMER_DOCKER directory.
+   Open your Terminal application and navigate to your the `ELMER_DOCKER` directory.
 
 ## Building the Docker Image
 
