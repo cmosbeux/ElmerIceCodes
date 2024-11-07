@@ -18,7 +18,7 @@ $$
 A_{\text{elmer}} = A_{\text{ref}} \left[ \text{Pa}^{-3} \cdot s^{-1} \right] \cdot 10^{18} \cdot \left( 31536 \cdot 10^{3} \right) 
 $$
 
-If we consider $ A_{\text{ref}} = 25 \cdot 10^{-25} \, \text{Pa}^{-3} \cdot s^{-1} $, we get:
+If we consider $A_{\text{ref}} = 25 \cdot 10^{-25} \, \text{Pa}^{-3} \cdot s^{-1}$, we get:
 
 $$
 A \approx 80 \, \text{MPa}^{-3} \cdot \text{s}^{-1} 
