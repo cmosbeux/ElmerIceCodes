@@ -21,7 +21,7 @@ $$
 If we consider $A_{\text{ref}} = 25 \cdot 10^{-25} \left[ \text{Pa}^{-3} \cdot s^{-1} \right]$, we get:
 
 $$
-A \approx 80 \, \text{MPa}^{-3} \cdot \text{s}^{-1} 
+A \approx 80 \left[ \text{MPa}^{-3} \cdot \text{s}^{-1} \right]
 $$
 
 We can then convert this to $\eta_{\text{elmer}}$:
