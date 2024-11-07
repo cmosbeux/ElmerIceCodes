@@ -3,7 +3,7 @@
 Let's define the viscosity as a function of the fluidity:
 
 $$
-\eta = \frac{1}{2} \left( EA \right)^{1/3} 
+\eta = \frac{1}{2} \left( EA \right)^{-1/3} 
 $$
 
 In Elmer, the fluidity uses the following unit:
