@@ -2,30 +2,30 @@
 
 Let's define the viscosity as a function of the fluidity:
 
-   \[
-   \eta = \frac{1}{2} \left( EA \right)^{1/3}
-   \]
+\[ 
+\eta = \frac{1}{2} \left( EA \right)^{1/3} 
+\]
 
 In Elmer, the fluidity uses the following unit:
 
-   \[
-   A_{\text{elmer}} = \left[ \text{MPa}^{-3} \cdot s^{-1} \right]
-   \]
+\[ 
+A_{\text{elmer}} = \left[ \text{MPa}^{-3} \cdot s^{-1} \right] 
+\]
 
 To convert \( A_{\text{ref}} \) to this unit, we use:
 
-   \[
-   A_{\text{elmer}} = A_{\text{ref}} \left[ \text{Pa}^{-3} \cdot s^{-1} \right] \cdot 10^{18} \cdot \left( 31536 \cdot 10^{3} \right)
-   \]
+\[ 
+A_{\text{elmer}} = A_{\text{ref}} \left[ \text{Pa}^{-3} \cdot s^{-1} \right] \cdot 10^{18} \cdot \left( 31536 \cdot 10^{3} \right) 
+\]
 
 If we consider \( A_{\text{ref}} = 25 \cdot 10^{-25} \, \text{Pa}^{-3} \cdot s^{-1} \), we get:
 
-   \[
-   A \approx 80 \, \text{MPa}^{-3} \cdot \text{s}^{-1}
-   \]
+\[ 
+A \approx 80 \, \text{MPa}^{-3} \cdot \text{s}^{-1} 
+\]
 
 We can then convert this to \( \eta_{\text{elmer}} \):
 
-   \[
-   \eta_{\text{elmer}} = \frac{1}{2} \cdot A_{\text{elmer}}^{-1/3} = \frac{1}{2} \cdot 80^{-1/3} \approx 0.116 \, \text{MPa}^{3} \cdot \text{s}^{-1}
-   \]
+\[ 
+\eta_{\text{elmer}} = \frac{1}{2} \cdot A_{\text{elmer}}^{-1/3} = \frac{1}{2} \cdot 80^{-1/3} \approx 0.116 \, \text{MPa}^{3} \cdot \text{s}^{-1} 
+\]
