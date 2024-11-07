@@ -27,5 +27,5 @@ $$
 We can then convert this to $\eta_{\text{elmer}}$:
 
 $$
-\eta_{\text{elmer}} = \frac{1}{2} \cdot A_{\text{elmer}}^{-1/3} = \frac{1}{2} \cdot 80^{-1/3} \approx 0.116 \, \text{MPa}^{3} \cdot \text{s}^{-1} 
+\eta_{\text{elmer}} = \frac{1}{2} \cdot A_{\text{elmer}}^{-1/3} = \frac{1}{2} \cdot 80^{-1/3} \approx 0.116 \left[ \text{MPa}^{3} \cdot \text{a}^{-1} \right]
 $$
