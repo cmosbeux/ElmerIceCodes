@@ -15,7 +15,7 @@ $$
 To convert $A_{\text{ref}}$ to this unit, we use:
 
 $$
-A_{\text{elmer}} = A_{\text{ref}} \left[ \text{Pa}^{-3} \cdot s^{-1} \right]  = A_{\text{ref}} \cdot 10^{18} \cdot \left( 31536 \cdot 10^{3} \right)  \left[ \text{MPa}^{-3} \cdot a^{-1} \right]
+A_{\text{elmer}} = A_{\text{ref}} \left[ \text{Pa}^{-3} \cdot s^{-1} \right]  = A_{\text{ref}} \cdot 10^{18} \cdot \left( 31536 \cdot 10^{3} \right)  \left[ \text{MPa}^{-3} \cdot \text{a}^{-1} \right]
 $$
 
 If we consider $A_{\text{ref}} = 25 \cdot 10^{-25} \left[ \text{Pa}^{-3} \cdot s^{-1} \right]$, we get:
