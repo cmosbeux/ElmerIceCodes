@@ -84,7 +84,7 @@ $$
 Simplifying further:
 
 $$
-\frac{H}{B} \left( \frac{1}{L} \right)^{1/m} \propto \rho g H \frac{H}{10}.
+\frac{H}{B} \left( \frac{1}{L} \right)^{1/n} \propto \rho g H \frac{H}{10}.
 $$
 
 ## Scaling Relationship
